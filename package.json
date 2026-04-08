@@ -17,7 +17,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "smoke": "ts-node src/smoke_e2e.ts",
-    "ci-ingest": "ts-node src/ci_ingest_main.ts"
+    "ci-ingest": "ts-node src/ci_ingest_main.ts",
+    "install:hints": "node scripts/install-hints.cjs",
+    "clean": "node scripts/clean-node-modules.cjs",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

@@ -20,6 +20,7 @@ import * as path from "path";
 import { resolveMcpDbPath } from "./mcp_db_path";
 import { applyCiResult } from "./ci_apply";
 import type { BuildPacketOptions } from "./context_builder";
+import { osDisplayName } from "./platform";
 
 function guardSecrets(label: string, payload: unknown): void {
   const r = scanRecordedPayload(label, payload);
@@ -68,6 +69,7 @@ const memory = new MemorySystemAPI();
 async function initMemory() {
   const dbPath = resolveMcpDbPath();
   await memory.init(dbPath);
+  console.error(`[mimir-mcp] platform: ${osDisplayName()}`);
   console.error(`[mimir-mcp] database: ${dbPath}`);
 }
 

@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { gitExecSyncOptions } from "./platform";
 
 /**
  * Paths changed in the working tree vs `ref` (e.g. last ingested commit SHA).
@@ -7,11 +8,7 @@ import { execSync } from "child_process";
 export function gitDiffNameOnlySinceRef(repoRoot: string, ref: string): string[] {
   if (!ref || !ref.trim()) return [];
   try {
-    const out = execSync(`git diff --name-only ${ref} --`, {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    const out = execSync(`git diff --name-only ${ref} --`, gitExecSyncOptions(repoRoot)).trim();
     if (!out) return [];
     return out.split(/\r?\n/).filter(Boolean);
   } catch {

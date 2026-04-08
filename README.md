@@ -46,9 +46,22 @@ git pull
 npm ci
 ```
 
-If `npm ci` fails because `node_modules` is in a bad state, remove it and retry: `rm -rf node_modules` (or delete the folder on Windows), then `npm ci` again.
+If `npm ci` fails because `node_modules` is in a bad state, remove it and retry, then `npm ci` again:
 
-**`sqlite3` (native):** Prebuilt binaries are used when available. If the install step tries to compile from source and fails, install OS build tools for [node-gyp](https://github.com/nodejs/node-gyp#installation) (e.g. **Windows:** Visual Studio Build Tools with “Desktop development with C++”; **macOS:** Xcode CLI tools; **Linux:** `build-essential`, `python3`).
+- **Any OS (recommended):** `npm run clean` — removes `node_modules` using Node’s filesystem API (works on Windows and Linux/macOS).
+- **Linux / macOS:** `rm -rf node_modules`
+- **Windows cmd:** `rmdir /s /q node_modules`
+- **Windows PowerShell:** `Remove-Item -Recurse -Force node_modules`
+
+**OS-specific commands** (env vars, CI ingest examples): run **`npm run install:hints`** — it detects the OS and prints the right syntax for Windows vs Linux/macOS.
+
+**`sqlite3` (native):** Prebuilt binaries are used when available. If the install step tries to compile from source and fails, install OS build tools for [node-gyp](https://github.com/nodejs/node-gyp#installation):
+
+| OS | Typical requirement |
+|----|---------------------|
+| **Windows** | Visual Studio Build Tools with “Desktop development with C++”, or full VS with that workload; Python 3 in PATH for node-gyp. |
+| **Linux** | `build-essential`, `python3` (package names vary by distro). |
+| **macOS** | Xcode Command Line Tools (`xcode-select --install`). |
 
 ## Proof demo
 
@@ -161,9 +174,11 @@ Single SQLite file:
 - **Default:** `<MIMIR_repo>/mimir.db` (next to `package.json`, **not** `cwd`).
 - **Override:** **`MIMIR_DB_PATH`** (absolute) in the MCP process env.
 
-Stderr on start: `[mimir-mcp] database: /path/to/mimir.db`.
+Stderr on start: `[mimir-mcp] platform: …` then `[mimir-mcp] database: /path/to/mimir.db`.
 
 ### Environment variables (reference)
+
+Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAME=value` vs. Linux/macOS `export NAME=value`). Run **`npm run install:hints`** for copy-paste examples for your machine.
 
 | Variable | Purpose |
 |----------|---------|

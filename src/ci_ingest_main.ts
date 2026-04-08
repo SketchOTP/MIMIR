@@ -1,6 +1,8 @@
 /**
  * CI helper: map GITHUB_JOB (or MIMIR_VALIDATION_ID) to a validation row.
- * Usage: MIMIR_DB_PATH=/path/mimir.db node -r ts-node/register src/ci_ingest_main.ts <repo_root>
+ * Usage: `npm run ci-ingest -- <repo_root>` (see package.json). Env vars:
+ *   Linux/macOS: `export MIMIR_DB_PATH=/path/mimir.db` then same command.
+ *   Windows cmd: `set MIMIR_DB_PATH=C:/path/mimir.db` then `npm run ci-ingest -- C:/path/to/repo`.
  * Env: GITHUB_JOB, MIMIR_VALIDATION_ID, CI_VERDICT (PASS|FAIL|PENDING), optional GITHUB_SHA, GITHUB_RUN_ID, CI_RUN_URL
  */
 import * as path from "path";
