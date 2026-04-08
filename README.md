@@ -77,3 +77,14 @@ Once attached, the Cursor Agent will have access to the following capabilities:
 - **`mimir_record_episode`**: Log task outcomes, assumed paths, and importantly, failed hypotheses.
 - **`mimir_record_decision`**: Hardcode architectural invariants into the Constitutional Intent Ledger.
 - **`mimir_run_gc`**: Manually trigger Episodic GC to synthesize repeated failures into permanent Rules.
+
+### Ingest coverage and `mimir_expand_handle`
+
+- **TypeScript / JavaScript**: Parsed with `ts-morph` (imports, classes, interfaces, functions) under `**/*.{ts,js}`.
+- **Python**: After the TS/JS pass, all `**/*.py` files under the ingest root are scanned (skipping common dirs like `.git`, `node_modules`, `.venv`). Each file becomes a `FILE:` node; top-level `def` / `async def` / `class` names become `SYMBOL:relative/path.py::name` entries (regex-based, not a full type system).
+- **Stored `FILE:` ids** use the **absolute** path on disk. The packet may show relative paths; **`mimir_expand_handle`** also resolves `FILE:relative/path` by suffix match against ingested files.
+- **Re-ingest** after pulling a new Mimir version if you need updated Python indexing: run `mimir_ingest` again on your project root.
+
+### Clearing local MCP data (smoke tests, experiments)
+
+Persistent state lives in `mimir.db` in the process **current working directory** (where Cursor launches the MCP server). To remove test rules/episodes/graph data, delete that file when the server is stopped, or use SQLite to delete specific rows from `intent_ledger` / `episode_journal` / `structural_graph`.

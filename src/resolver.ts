@@ -48,8 +48,19 @@ export class ExpansionResolver {
       return null;
     }
 
-    if (h.startsWith("SYMBOL:") || h.startsWith("FILE:")) {
-      const node = await this.storage.getNodeById(h);
+    if (h.startsWith("FILE:")) {
+      let node = await this.storage.getNodeById(h);
+      if (!node) node = await this.storage.findFileNodeFlexible(h);
+      if (node) {
+        const text = JSON.stringify(node, null, 2);
+        if (this.governor.addCost(budget, text)) return text;
+      }
+      return null;
+    }
+
+    if (h.startsWith("SYMBOL:")) {
+      let node = await this.storage.getNodeById(h);
+      if (!node) node = await this.storage.findSymbolNodeFlexible(h);
       if (node) {
         const text = JSON.stringify(node, null, 2);
         if (this.governor.addCost(budget, text)) return text;

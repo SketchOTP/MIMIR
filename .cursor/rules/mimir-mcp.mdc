@@ -59,3 +59,4 @@ If the same wrong hypothesis repeats across episodes, consider **`mimir_run_gc`*
 - Do not fabricate packet contents; if a tool errors, say so and proceed with limited scope.
 - Keep **`task_id`** stable within one task so episodes stay correlated.
 - Secrets and one-off credentials must **not** be written into Mimir fields; describe them obliquely if needed.
+- Graph **`FILE:`** / **`SYMBOL:`** expansion requires those nodes to exist: run **`mimir_ingest`** on the **absolute** project root after checkout or Mimir upgrades. Use handle forms from the packet (`SYMBOL:relative/path.py::symbol`); `SYMBOL:pkg.module::name` is not a valid graph id unless ingested that way.

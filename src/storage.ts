@@ -246,4 +246,39 @@ export class StorageLayer {
   async removeNodesByPath(path: string) {
     await this.db.run(`DELETE FROM structural_graph WHERE path = ?`, path);
   }
+
+  /** Resolve FILE node when id is not exact (relative path, mixed separators). */
+  async findFileNodeFlexible(fileHandlePayload: string): Promise<StructuralNode | undefined> {
+    const raw = fileHandlePayload.startsWith("FILE:") ? fileHandlePayload.slice("FILE:".length) : fileHandlePayload;
+    const direct = await this.getNodeById(`FILE:${raw}`);
+    if (direct) return direct;
+    const normalizedAsk = raw.replace(/\\/g, "/");
+    const nodes = await this.getStructuralNodes();
+    const fileNodes = nodes.filter((n) => n.type === "FILE");
+    return fileNodes.find((n) => {
+      const p = n.path.replace(/\\/g, "/");
+      return p === normalizedAsk || p.endsWith("/" + normalizedAsk) || p.endsWith(normalizedAsk);
+    });
+  }
+
+  /** Resolve SYMBOL node when id is not exact (path normalization). */
+  async findSymbolNodeFlexible(symbolHandlePayload: string): Promise<StructuralNode | undefined> {
+    const raw = symbolHandlePayload.startsWith("SYMBOL:") ? symbolHandlePayload.slice("SYMBOL:".length) : symbolHandlePayload;
+    const fullId = symbolHandlePayload.startsWith("SYMBOL:") ? symbolHandlePayload : `SYMBOL:${symbolHandlePayload}`;
+    const direct = await this.getNodeById(fullId);
+    if (direct) return direct;
+    const idx = raw.lastIndexOf("::");
+    if (idx === -1) return undefined;
+    const rel = raw.slice(0, idx).replace(/\\/g, "/");
+    const name = raw.slice(idx + 2);
+    const nodes = await this.getStructuralNodes();
+    const symNodes = nodes.filter((n) => n.type === "SYMBOL");
+    const exactRel = symNodes.find((n) => n.id === `SYMBOL:${rel}::${name}`);
+    if (exactRel) return exactRel;
+    return symNodes.find((n) => {
+      if (!n.id.endsWith(`::${name}`)) return false;
+      const pathNorm = n.path.replace(/\\/g, "/");
+      return pathNorm.endsWith(rel) || pathNorm.endsWith("/" + rel);
+    });
+  }
 }
