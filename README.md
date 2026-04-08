@@ -86,6 +86,7 @@ Once attached, the Cursor Agent will have access to the following capabilities:
 - **`mimir_expand_handle`**: Lazily expand concise references (e.g., `TEST:xyz`) if the current budget allows.
 - **`mimir_record_episode`**: Log task outcomes, assumed paths, and importantly, failed hypotheses.
 - **`mimir_record_decision`**: Hardcode architectural invariants into the Constitutional Intent Ledger.
+- **`mimir_record_validation`**: Register or update entries in `validation_registry` (tests and verifiers). Produces **`TEST:`** / **`VERIFIER:`** handles in packets; use this instead of manual SQLite when adding validations.
 - **`mimir_run_gc`**: Manually trigger Episodic GC to synthesize repeated failures into permanent Rules.
 
 ### Ingest coverage and `mimir_expand_handle`
@@ -106,4 +107,4 @@ On startup, the server logs a line to stderr: `[mimir-mcp] database: /path/to/mi
 
 ### Clearing local MCP data (smoke tests, experiments)
 
-Stop the MCP server, then delete the `mimir.db` file you see in the log above (or remove specific rows from `intent_ledger` / `episode_journal` / `structural_graph`).
+Stop the MCP server, then delete the `mimir.db` file you see in the log above (or remove specific rows from `intent_ledger` / `episode_journal` / `validation_registry` / `structural_graph`).

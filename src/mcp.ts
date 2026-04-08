@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { MemorySystemAPI } from "./index";
-import { BudgetMode, TaskType } from "./schemas";
+import { BudgetMode, TaskType, ValidationEntry } from "./schemas";
 import * as path from "path";
 
 /** Stable DB location: default is <MIMIR repo root>/mimir.db (parent of src/), not process.cwd() (Cursor varies cwd). */
@@ -20,7 +20,7 @@ function resolveMcpDbPath(): string {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "2.1.0",
+    version: "2.2.0",
   },
   {
     capabilities: {
@@ -140,6 +140,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "mimir_record_validation",
+        description:
+          "Registers a test or verifier in validation_registry (TEST: / VERIFIER: handles in packets and mimir_expand_handle). INVARIANT rows appear as VERIFIER: lines in context packets.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Unique ID, e.g. auth_integration_smoke" },
+            type: { type: "string", enum: ["TEST", "VERIFIER", "INVARIANT"], description: "TEST → TEST:id; VERIFIER and INVARIANT → VERIFIER:id in packets." },
+            target_symbols: { type: "array", items: { type: "string" }, description: "Scoped symbol ids or names for relevance ranking." },
+            target_files: { type: "array", items: { type: "string" }, description: "Paths for relevance ranking." },
+            known_failure_signatures: { type: "array", items: { type: "string" }, description: "Optional failure tokens or messages to remember." },
+            last_run_verdict: {
+              type: "string",
+              enum: ["PASS", "FAIL", "PENDING"],
+              description: "Latest known result (default PENDING).",
+            },
+            last_run_timestamp: { type: "string", description: "ISO timestamp; defaults to now if omitted." },
+          },
+          required: ["id", "type"],
+        },
+      },
+      {
         name: "mimir_run_gc",
         description:
           "Episodic consolidation: repeated failed hypotheses become AUTO_RULE_* intents, episodes purged, and a line appended to global lesson hints.",
@@ -212,6 +234,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         dec.type === "DECISION" ? "DECISION" :
         dec.type === "NON_GOAL" ? "NON_GOAL" : "RULE";
       return { content: [{ type: "text", text: `Successfully recorded decision ${handlePrefix}:${dec.id}.` }] };
+    }
+
+    else if (name === "mimir_record_validation") {
+      const v = args as Record<string, unknown>;
+      const entry: ValidationEntry = {
+        id: String(v.id),
+        type: v.type as ValidationEntry["type"],
+        target_symbols: Array.isArray(v.target_symbols) ? (v.target_symbols as string[]) : [],
+        target_files: Array.isArray(v.target_files) ? (v.target_files as string[]) : [],
+        known_failure_signatures: Array.isArray(v.known_failure_signatures)
+          ? (v.known_failure_signatures as string[])
+          : [],
+        last_run_verdict: (v.last_run_verdict as ValidationEntry["last_run_verdict"]) ?? "PENDING",
+        last_run_timestamp:
+          typeof v.last_run_timestamp === "string" && v.last_run_timestamp.length > 0
+            ? v.last_run_timestamp
+            : new Date().toISOString(),
+      };
+      await memory.record_validation(entry);
+      const packetHandle = entry.type === "TEST" ? `TEST:${entry.id}` : `VERIFIER:${entry.id}`;
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully recorded validation ${packetHandle} (registry type ${entry.type}).`,
+          },
+        ],
+      };
     }
 
     else if (name === "mimir_run_gc") {
