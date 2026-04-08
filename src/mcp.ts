@@ -55,7 +55,7 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "4.0.1",
+    version: "4.0.2",
   },
   {
     capabilities: {

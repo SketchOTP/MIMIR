@@ -30,7 +30,8 @@ export function gitExecSyncOptions(cwd: string): ExecSyncOptions {
   if (isWindows) {
     return {
       ...base,
-      shell: process.env.ComSpec || true,
+      // `shell` must be a string in @types/node; `true` is invalid for this overload.
+      shell: process.env.ComSpec ?? "cmd.exe",
       windowsHide: true,
     };
   }

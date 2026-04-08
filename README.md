@@ -116,7 +116,7 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.1**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.2**.
 
 ### Install vs. ingest
 
