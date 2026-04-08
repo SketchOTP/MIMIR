@@ -128,7 +128,7 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.4**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.5**.
 
 ### Install vs. ingest
 
@@ -217,7 +217,18 @@ Stderr on start: `[mimir-mcp] platform: …` then `[mimir-mcp] database: /path/t
 
 **SQLite (`mimir.db`) stays the source of truth.** Obsidian is a **per-project WIKI**: Markdown + wikilinks for graph view, search, and reading—not a replacement database.
 
-**Default layout** (no extra env beyond the vault path):
+#### Configuration file (easiest for new users)
+
+1. Copy **`.mimir/config.example.yaml`** → **`.mimir/config.yaml`** in the Mimir repo (same folder as `package.json`).
+2. Set **`obsidian.enabled: true`** and **`obsidian.vault_path`** to your vault’s **absolute** path (forward slashes are fine on Windows).
+3. Adjust **`obsidian.project_slug`** if this MCP instance is for a repo other than Mimir (e.g. `anima-linux`).
+4. Restart the MCP server.
+
+**`.mimir/config.yaml`** is **gitignored** so local paths are not committed. Optional **`MIMIR_CONFIG_PATH`** points to a config file anywhere on disk.
+
+**Precedence:** **`MIMIR_OBSIDIAN_VAULT_PATH`** (env) overrides the file vault path. **`MIMIR_OBSIDIAN_DISABLED=1`** turns the mirror off even if the file says enabled. Other Obsidian env vars override the matching file fields.
+
+#### Default layout (when a vault path resolves)
 
 - **Mirror root:** `<vault>/10_KGRAPH/KG/<project_slug>/` with `Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, and **`MOC.md`**.
 - **Project slug:** **`MIMIR_OBSIDIAN_PROJECT_SLUG`** (default **`mimir`**). Use another repo’s slug when that project uses the same vault.
@@ -242,7 +253,9 @@ Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAM
 | `MIMIR_ALLOW_UNSAFE_SECRET_RECORDING` | Set to `1` to allow secret-like strings in MCP writes (not recommended). |
 | `MIMIR_TEAM_LEDGER_IMPORT` | Absolute path to JSON file merged at **`init`** (intents + validations). |
 | `MIMIR_TEAM_LEDGER_EXPORT_PATH` | Absolute path; rewritten after decision/validation writes when set. |
-| `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute path to Obsidian vault root; enables WIKI mirror (optional). |
+| `MIMIR_CONFIG_PATH` | Absolute path to a YAML config file (optional; default `<MIMIR repo>/.mimir/config.yaml`). |
+| `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute vault path; **overrides** `obsidian.vault_path` in config (optional). |
+| `MIMIR_OBSIDIAN_DISABLED` | Set to `1` to disable WIKI mirror regardless of config. |
 | `MIMIR_OBSIDIAN_PROJECT_SLUG` | Folder name under `10_KGRAPH/KG/` (default **`mimir`**). |
 | `MIMIR_OBSIDIAN_MIRROR_REL` | Override mirror root relative to vault (wins over default wiki path). |
 | `MIMIR_OBSIDIAN_BASE` | Legacy: single folder under vault if `MIRROR_REL` unset (e.g. **`Mimir`**). |

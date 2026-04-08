@@ -1,0 +1,18 @@
+# Copy to:  <MIMIR repo>/.mimir/config.yaml
+# (config.yaml is gitignored — keep machine-specific paths local)
+#
+# Optional: set MIMIR_CONFIG_PATH to an absolute path to use a config file elsewhere.
+
+obsidian:
+  # false = never mirror from this file (env MIMIR_OBSIDIAN_VAULT_PATH still enables if set)
+  enabled: true
+
+  # Absolute path to your Obsidian vault root (folder containing .obsidian)
+  vault_path: "N:/WIKI/atlas_wiki/vault"
+
+  # Subfolder under the vault: 10_KGRAPH/KG/<project_slug>/
+  project_slug: mimir
+
+  # Optional overrides (usually omit — defaults are fine)
+  # mirror_rel: "10_KGRAPH/KG/mimir"   # full mirror root under vault
+  # base: "Mimir"                      # legacy: single folder under vault

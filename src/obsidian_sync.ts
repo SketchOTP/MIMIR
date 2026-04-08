@@ -6,39 +6,14 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import yaml from "js-yaml";
 import type { EpisodeEntry, IntentDecision, SubsystemCard, TraceEntry, ValidationEntry } from "./schemas";
+import { getObsidianMirrorSettings } from "./mimir_config";
 
 function vaultPath(): string | null {
-  const p = process.env.MIMIR_OBSIDIAN_VAULT_PATH?.trim();
-  return p ? path.resolve(p) : null;
+  return getObsidianMirrorSettings().vaultPath;
 }
 
-/** Vault-relative path using `/` (for wikilinks and display). */
-function toPosixRel(rel: string): string {
-  return rel.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
-}
-
-/**
- * Root folder for all mirrored notes, relative to vault root.
- * - `MIMIR_OBSIDIAN_MIRROR_REL` wins if set (e.g. `Mimir` or `10_KGRAPH/KG/foo`).
- * - Else `MIMIR_OBSIDIAN_BASE` (legacy single-folder under vault).
- * - Else default wiki layout: `10_KGRAPH/KG/<MIMIR_OBSIDIAN_PROJECT_SLUG||mimir>`.
- */
-export function mirrorRelFromVaultRoot(): string {
-  const mirrorRel = process.env.MIMIR_OBSIDIAN_MIRROR_REL?.trim();
-  if (mirrorRel) return toPosixRel(mirrorRel);
-  const legacyBase = process.env.MIMIR_OBSIDIAN_BASE?.trim();
-  if (legacyBase) return toPosixRel(legacyBase);
-  const slug = sanitizeSegment(process.env.MIMIR_OBSIDIAN_PROJECT_SLUG?.trim() || "mimir");
-  return `10_KGRAPH/KG/${slug}`;
-}
-
-export function projectSlugForWiki(): string {
-  return sanitizeSegment(process.env.MIMIR_OBSIDIAN_PROJECT_SLUG?.trim() || "mimir");
-}
-
-function mirrorAbs(vault: string): string {
-  const rel = mirrorRelFromVaultRoot();
-  return path.join(vault, ...rel.split("/").filter(Boolean));
+function mirrorAbs(vault: string, baseRel: string): string {
+  return path.join(vault, ...baseRel.split("/").filter(Boolean));
 }
 
 /** Safe single path segment for filenames (not full paths). */
@@ -74,7 +49,7 @@ async function appendToTaskHub(
   episodeRelNoExt: string,
   episodeLabel: string
 ): Promise<void> {
-  const root = mirrorAbs(vault);
+  const root = mirrorAbs(vault, baseRel);
   const safe = sanitizeSegment(taskId);
   const taskDir = path.join(root, "Tasks");
   const taskFile = path.join(taskDir, `${safe}.md`);
@@ -133,7 +108,7 @@ tags: #mimir/project #mimir/wiki
 }
 
 async function ensureMOC(vault: string, baseRel: string, slug: string): Promise<void> {
-  const root = mirrorAbs(vault);
+  const root = mirrorAbs(vault, baseRel);
   const mocFile = path.join(root, "MOC.md");
   try {
     await fs.access(mocFile);
@@ -157,15 +132,16 @@ tags: #mimir/moc #mimir/wiki
 
 ---
 
-Env: \`MIMIR_OBSIDIAN_VAULT_PATH\`, \`MIMIR_OBSIDIAN_PROJECT_SLUG\` (default \`mimir\`). Override mirror root with \`MIMIR_OBSIDIAN_MIRROR_REL\` or legacy \`MIMIR_OBSIDIAN_BASE\`.
+Config: \`.mimir/config.yaml\` (see \`config.example.yaml\`) or env \`MIMIR_OBSIDIAN_VAULT_PATH\`, \`MIMIR_OBSIDIAN_PROJECT_SLUG\`, \`MIMIR_OBSIDIAN_MIRROR_REL\` / \`MIMIR_OBSIDIAN_BASE\`.
 `;
     await fs.writeFile(mocFile, fmBlock({ tags: ["mimir/moc", "mimir/wiki"], mimir_project_slug: slug }) + body, "utf8");
   }
 }
 
 async function prepareMirror(vault: string): Promise<{ baseRel: string; slug: string }> {
-  const baseRel = mirrorRelFromVaultRoot();
-  const slug = projectSlugForWiki();
+  const s = getObsidianMirrorSettings();
+  const baseRel = s.mirrorRel;
+  const slug = s.projectSlug;
   await ensureProjectStub(vault, baseRel, slug);
   await ensureMOC(vault, baseRel, slug);
   return { baseRel, slug };
@@ -179,7 +155,7 @@ export async function syncEpisodeToObsidian(entry: EpisodeEntry): Promise<void> 
     const safeTask = sanitizeSegment(entry.task_id);
     const tsSlug = entry.timestamp.replace(/[:.]/g, "-");
     const epBase = `${tsSlug}-${safeTask}`;
-    const root = mirrorAbs(vault);
+    const root = mirrorAbs(vault, baseRel);
     const epDir = path.join(root, "Episodes");
     const testsLinks =
       entry.tests_run.length > 0
@@ -245,7 +221,7 @@ export async function syncIntentToObsidian(d: IntentDecision): Promise<void> {
   try {
     const { baseRel } = await prepareMirror(vault);
     const idSafe = sanitizeSegment(d.id);
-    const dir = path.join(mirrorAbs(vault), "Intents");
+    const dir = path.join(mirrorAbs(vault, baseRel), "Intents");
     const scopeYaml = yaml.dump(d.target_scope, { lineWidth: 100 }).trimEnd();
     const body = `# Intent — ${d.id}
 
@@ -276,7 +252,7 @@ export async function syncValidationToObsidian(v: ValidationEntry): Promise<void
   try {
     const { baseRel } = await prepareMirror(vault);
     const idSafe = sanitizeSegment(v.id);
-    const dir = path.join(mirrorAbs(vault), "Validations");
+    const dir = path.join(mirrorAbs(vault, baseRel), "Validations");
     const body = `# Validation — ${v.id}
 
 **Type:** \`${v.type}\` · **Last verdict:** \`${v.last_run_verdict}\` · **When:** ${v.last_run_timestamp}
@@ -308,7 +284,7 @@ export async function syncSubsystemToObsidian(card: SubsystemCard): Promise<void
   try {
     const { baseRel } = await prepareMirror(vault);
     const idSafe = sanitizeSegment(card.id);
-    const dir = path.join(mirrorAbs(vault), "Subsystems");
+    const dir = path.join(mirrorAbs(vault, baseRel), "Subsystems");
     const body = `# Subsystem — ${card.id}
 
 ${card.description}
@@ -335,7 +311,7 @@ export async function syncTraceToObsidian(t: TraceEntry): Promise<void> {
   try {
     const { baseRel } = await prepareMirror(vault);
     const idSafe = sanitizeSegment(t.id);
-    const dir = path.join(mirrorAbs(vault), "Traces");
+    const dir = path.join(mirrorAbs(vault, baseRel), "Traces");
     const body = `# Trace — ${t.id}
 
 **Verdict:** \`${t.verdict}\` · **When:** ${t.timestamp}

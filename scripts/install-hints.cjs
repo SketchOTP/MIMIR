@@ -33,7 +33,8 @@ if (isWin) {
   console.log("    npm run ci-ingest -- C:/path/to/app/repo");
   console.log("");
   console.log("  Obsidian WIKI (optional; SQLite stays canonical):");
-  console.log("    set MIMIR_OBSIDIAN_VAULT_PATH=N:/WIKI/atlas_wiki/vault");
+  console.log("    Copy .mimir/config.example.yaml -> .mimir/config.yaml and set vault_path,");
+  console.log("    OR: set MIMIR_OBSIDIAN_VAULT_PATH=N:/WIKI/atlas_wiki/vault");
   console.log("    set MIMIR_OBSIDIAN_PROJECT_SLUG=mimir");
 } else {
   console.log("--- Linux / macOS (bash/zsh) ---");
@@ -54,7 +55,8 @@ if (isWin) {
   console.log("    npm run ci-ingest -- /path/to/app/repo");
   console.log("");
   console.log("  Obsidian WIKI (optional; SQLite stays canonical):");
-  console.log("    export MIMIR_OBSIDIAN_VAULT_PATH=/path/to/vault");
+  console.log("    Copy .mimir/config.example.yaml -> .mimir/config.yaml and set vault_path,");
+  console.log("    OR: export MIMIR_OBSIDIAN_VAULT_PATH=/path/to/vault");
   console.log("    export MIMIR_OBSIDIAN_PROJECT_SLUG=mimir");
 }
 console.log("");
