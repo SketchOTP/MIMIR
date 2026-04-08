@@ -37,6 +37,8 @@ async function main() {
   delete process.env.MIMIR_ALLOW_UNSAFE_SECRET_RECORDING;
 
   const dbFile = path.join(os.tmpdir(), `mimir-smoke-${Date.now()}.db`);
+  const obsVault = path.join(os.tmpdir(), `mimir-obs-smoke-${Date.now()}`);
+  process.env.MIMIR_OBSIDIAN_VAULT_PATH = obsVault;
   try {
   const memory = new MemorySystemAPI();
   await memory.init(dbFile);
@@ -103,6 +105,13 @@ async function main() {
     next_best_action: "none",
     provenance: { repo_head_at_close: "deadbeef", ci_run_url: "https://ci.example/job/1" },
   });
+
+  const mocPath = path.join(obsVault, "Mimir", "MOC.md");
+  ok("obsidian mirror MOC", fs.existsSync(mocPath));
+  const epDir = path.join(obsVault, "Mimir", "Episodes");
+  const epFiles = fs.existsSync(epDir) ? fs.readdirSync(epDir) : [];
+  ok("obsidian mirror wrote episode", epFiles.some((f) => f.endsWith(".md")));
+  ok("obsidian task hub", fs.existsSync(path.join(obsVault, "Mimir", "Tasks", "SMOKE_EP_1.md")));
 
   const repoRoot = path.join(__dirname, "..");
   await memory.ingest_repo(repoRoot);
@@ -275,8 +284,14 @@ async function main() {
 
   console.log(failures === 0 ? "\n=== ALL SMOKE CHECKS PASSED ===" : "\n=== SMOKE FAILED ===");
   } finally {
+    delete process.env.MIMIR_OBSIDIAN_VAULT_PATH;
     try {
       fs.unlinkSync(dbFile);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(obsVault, { recursive: true, force: true });
     } catch {
       /* ignore */
     }

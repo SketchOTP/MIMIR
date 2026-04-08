@@ -23,6 +23,13 @@ import {
   importTeamLedgerJson,
 } from "./team_ledger";
 import { recallSimilar as recallSimilarSearch } from "./recall_tfidf";
+import {
+  syncEpisodeToObsidian,
+  syncIntentToObsidian,
+  syncSubsystemToObsidian,
+  syncTraceToObsidian,
+  syncValidationToObsidian,
+} from "./obsidian_sync";
 import * as path from "path";
 
 export class MemorySystemAPI {
@@ -74,15 +81,18 @@ export class MemorySystemAPI {
 
   async record_episode(entry: EpisodeEntry): Promise<void> {
     await this.storage.saveEpisode(entry);
+    await syncEpisodeToObsidian(entry);
   }
 
   async record_validation(result: ValidationEntry): Promise<void> {
     await this.storage.saveValidation(result);
+    await syncValidationToObsidian(result);
     await this.maybeExportTeamLedger();
   }
 
   async record_decision(decision: IntentDecision): Promise<void> {
     await this.storage.saveIntent(decision);
+    await syncIntentToObsidian(decision);
     await this.maybeExportTeamLedger();
   }
 
@@ -169,10 +179,12 @@ export class MemorySystemAPI {
 
   async record_subsystem_card(card: SubsystemCard): Promise<void> {
     await this.storage.saveSubsystemCard(card);
+    await syncSubsystemToObsidian(card);
   }
 
   async record_trace(trace: TraceEntry): Promise<void> {
     await this.telemetry.ingestExecutionTrace(trace);
+    await syncTraceToObsidian(trace);
   }
 }
 

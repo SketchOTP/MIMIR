@@ -31,6 +31,10 @@ if (isWin) {
   console.log("    set CI_VERDICT=PASS");
   console.log("    set MIMIR_VALIDATION_ID=my_test_id");
   console.log("    npm run ci-ingest -- C:/path/to/app/repo");
+  console.log("");
+  console.log("  Obsidian vault mirror (optional):");
+  console.log("    set MIMIR_OBSIDIAN_VAULT_PATH=C:/Users/you/Obsidian/MyVault");
+  console.log("    set MIMIR_OBSIDIAN_BASE=Mimir");
 } else {
   console.log("--- Linux / macOS (bash/zsh) ---");
   console.log("  Install / refresh dependencies (from repo root):");
@@ -48,5 +52,9 @@ if (isWin) {
   console.log("    export CI_VERDICT=PASS");
   console.log("    export MIMIR_VALIDATION_ID=my_test_id");
   console.log("    npm run ci-ingest -- /path/to/app/repo");
+  console.log("");
+  console.log("  Obsidian vault mirror (optional):");
+  console.log("    export MIMIR_OBSIDIAN_VAULT_PATH=/home/you/Obsidian/MyVault");
+  console.log("    export MIMIR_OBSIDIAN_BASE=Mimir");
 }
 console.log("");

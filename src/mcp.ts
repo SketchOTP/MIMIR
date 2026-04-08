@@ -55,7 +55,7 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "4.0.2",
+    version: "4.0.3",
   },
   {
     capabilities: {
@@ -71,6 +71,11 @@ async function initMemory() {
   await memory.init(dbPath);
   console.error(`[mimir-mcp] platform: ${osDisplayName()}`);
   console.error(`[mimir-mcp] database: ${dbPath}`);
+  const obs = process.env.MIMIR_OBSIDIAN_VAULT_PATH?.trim();
+  if (obs) {
+    const base = process.env.MIMIR_OBSIDIAN_BASE?.trim() || "Mimir";
+    console.error(`[mimir-mcp] obsidian mirror: ${obs} (base: ${base})`);
+  }
 }
 
 // Register tools

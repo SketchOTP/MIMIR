@@ -128,7 +128,7 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.2**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.3**.
 
 ### Install vs. ingest
 
@@ -213,6 +213,16 @@ Single SQLite file:
 
 Stderr on start: `[mimir-mcp] platform: …` then `[mimir-mcp] database: /path/to/mimir.db`.
 
+### Obsidian vault mirror (optional)
+
+Mimir can **mirror** ledger writes into an [Obsidian](https://obsidian.md/) vault as Markdown with **wikilinks**, so Obsidian’s **graph view** connects tasks, episodes, intents, validations, subsystems, and traces.
+
+- **SQLite stays canonical** for MCP queries, packets, and recall. The vault is a **read-friendly projection** (search, backlinks, manual notes).
+- Set **`MIMIR_OBSIDIAN_VAULT_PATH`** to the **absolute path** of your vault root (the folder that contains `.obsidian` or will).
+- Optional **`MIMIR_OBSIDIAN_BASE`**: subfolder inside the vault (default **`Mimir`**). Notes go under `<vault>/<base>/Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, plus **`MOC.md`**.
+- **Episodes** link to a **task hub** (`Tasks/<task_id>.md`) and to **validations** listed in `tests_run`.
+- **Limitations:** **`mimir_team_ledger_import`** and **`mimir_run_gc`** (AUTO_RULE synthesis) do not automatically sync to Obsidian in this version; new rows from those paths appear in SQLite only unless recorded again through the normal tools.
+
 ### Environment variables (reference)
 
 Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAME=value` vs. Linux/macOS `export NAME=value`). Run **`npm run install:hints`** for copy-paste examples for your machine.
@@ -223,6 +233,8 @@ Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAM
 | `MIMIR_ALLOW_UNSAFE_SECRET_RECORDING` | Set to `1` to allow secret-like strings in MCP writes (not recommended). |
 | `MIMIR_TEAM_LEDGER_IMPORT` | Absolute path to JSON file merged at **`init`** (intents + validations). |
 | `MIMIR_TEAM_LEDGER_EXPORT_PATH` | Absolute path; rewritten after decision/validation writes when set. |
+| `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute path to Obsidian vault root; enables Markdown mirror + wikilinks (optional). |
+| `MIMIR_OBSIDIAN_BASE` | Subfolder under the vault for Mimir notes (default **`Mimir`**). |
 
 **`npm run ci-ingest`** (run from Mimir repo with `ts-node`):
 
