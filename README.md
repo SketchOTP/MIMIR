@@ -6,9 +6,12 @@
 
 Mimir keeps **context packets** bounded on large codebases (10k+ files) by combining a **structural graph** (CodeRank centrality, coverage/churn), **YAML** serialization (~30% fewer tokens than JSON), **relevance-ranked** intents/tests/episodes, and **GC** that turns repeated failed hypotheses into durable rules.
 
+**AI agents:** **Cursor** applies **`.cursor/rules/mimir-mcp.mdc`**. **OpenAI Codex** loads **`AGENTS.md`** from the repo root ([Codex `AGENTS.md` guide](https://developers.openai.com/codex/guides/agents-md)). The playbook is the same—**edit both files together** when you change workflow text. Optional global Codex defaults: `~/.codex/AGENTS.md`.
+
 ## Contents
 
 - [Architecture](#architecture)
+- [Agent instructions (Cursor + Codex)](#agent-instructions-cursor--codex)
 - [Clone, pull, and install](#clone-pull-and-install)
 - [Proof demo](#proof-demo), [smoke tests](#smoke-tests), [npm scripts](#npm-scripts)
 - [Design goals](#design-goals-limits-addressed)
@@ -29,6 +32,15 @@ Mimir keeps **context packets** bounded on large codebases (10k+ files) by combi
 | **Storage** | SQLite: graph nodes (`centrality`, `coverage`, `churn`, `status`), intent ledger, episodes, `validation_registry`, area lessons, per-task packet snapshots (for delta). |
 
 **Schemas (high level):** `SubsystemCard` (~100-token domain summaries), `TraceEntry` (telemetry matching), `StructuralNode` (centrality/coverage/churn/status), intents, episodes, validations.
+
+## Agent instructions (Cursor + Codex)
+
+| Client | Where rules live |
+|--------|------------------|
+| **Cursor** | `.cursor/rules/mimir-mcp.mdc` (this repo; `alwaysApply: true`) |
+| **OpenAI Codex CLI** | `AGENTS.md` at repository root (auto-loaded; merged with `~/.codex/AGENTS.md` if present) |
+
+Working on **another codebase** with Codex but using Mimir MCP: add an **`AGENTS.md`** (or the same Mimir playbook) to **that** project’s root so Codex receives the ingest → packet → expand → record workflow.
 
 ## Clone, pull, and install
 

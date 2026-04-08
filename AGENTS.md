@@ -1,13 +1,10 @@
----
-description: Full Mimir MCP playbook—architecture, every tool, workflow, packets, CI, team ledger, env, guardrails (agent-optimized)
-alwaysApply: true
----
-
-<!-- Keep in sync with AGENTS.md at repo root (OpenAI Codex loads AGENTS.md). Edit both when changing this playbook. -->
-
 # Mimir MCP — agent playbook
 
-Use this document as the **single source of truth** for how to use **Mimir** in Cursor. **Same playbook** for **OpenAI Codex** lives in **`AGENTS.md`** at the repository root. Mimir is a **structure-first memory MCP**: YAML **context packets**, **CodeRank** graph (TS/JS/Python), SQLite, episodic **GC**, and tools for ingest → packet → expand → record. **Do not skip Mimir on substantive coding or architecture work** when the server is available.
+**Keep in sync with:** `.cursor/rules/mimir-mcp.mdc` (Cursor `alwaysApply` rules). Edit **both** when you change workflow text.
+
+**Who loads this:** [OpenAI Codex CLI](https://developers.openai.com/codex/guides/agents-md) reads **`AGENTS.md`** from the project root (and walk-up directories). Cursor reads **`.cursor/rules/mimir-mcp.mdc`**. Same Mimir behavior; two entry points.
+
+Use this document as the **single source of truth** for how to use **Mimir** from any client. Mimir is a **structure-first memory MCP**: YAML **context packets**, **CodeRank** graph (TS/JS/Python), SQLite, episodic **GC**, and tools for ingest → packet → expand → record. **Do not skip Mimir on substantive coding or architecture work** when the server is available.
 
 ---
 
@@ -37,7 +34,7 @@ Use this document as the **single source of truth** for how to use **Mimir** in 
 
 | Step | Meaning |
 |------|---------|
-| **Mimir installed** | Mimir repo on disk, **`npm ci`**, Cursor MCP runs **`node <MIMIR>/bin/mimir-mcp.js`**. Does **not** index your app. |
+| **Mimir installed** | Mimir repo on disk, **`npm ci`**, MCP runs **`node <MIMIR>/bin/mimir-mcp.js`**. Does **not** index your app. |
 | **Ingest your app** | Call **`mimir_ingest`** with **`path`** = **absolute** directory root of the project under work. |
 | **Success check** | Response must show **`structural_graph nodes: N`** with **N > 0** (and **`database:`** path). **N = 0** ⇒ wrong path, no sources, or unreadable tree. |
 | **Stale graph** | If **`selection_meta.ingest_freshness.graph_matches_ingest_head`** is **false**, re-run **`mimir_ingest`** on the **same absolute root**. |
@@ -151,7 +148,7 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 
 ## Database and environment
 
-- **Default DB:** `<MIMIR_repo>/mimir.db` (beside Mimir **`package.json`**), **not** Cursor cwd.
+- **Default DB:** `<MIMIR_repo>/mimir.db` (beside Mimir **`package.json`**), **not** the client cwd.
 - **`MIMIR_DB_PATH`**: absolute override. MCP logs **`[mimir-mcp] platform: …`** and **`[mimir-mcp] database: …`** on stderr.
 
 | Variable | Role |
@@ -192,3 +189,11 @@ Shell syntax differs by OS; for copy-paste env examples run **`npm run install:h
 | Inspect DB | **`mimir_query_memory`** |
 | Cleanup row | **`mimir_delete_memory`** |
 | Consolidate failed tries | **`mimir_run_gc`** |
+
+---
+
+## Codex-specific notes
+
+- **Project instructions:** This file (`AGENTS.md`) is loaded automatically by Codex CLI (see OpenAI docs for **`AGENTS.override.md`**, size limits ~32 KiB default, and merge order).
+- **Global defaults:** Put cross-repo habits in **`~/.codex/AGENTS.md`** (optional).
+- **Other app repos:** Copy or adapt **`AGENTS.md`** into **that** project root if you use Mimir against a codebase that is not the Mimir repo — the playbook is about **how to call Mimir tools**, not only about developing Mimir itself.
