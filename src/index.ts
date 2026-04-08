@@ -5,7 +5,7 @@ import { TokenGovernor } from "./token_governor";
 import { ExpansionResolver } from "./resolver";
 import { LifecycleManager } from "./lifecycle";
 import { TelemetryIngestor } from "./telemetry";
-import { TaskType, BudgetMode, EpisodeEntry, ValidationEntry, IntentDecision } from "./schemas";
+import { TaskType, BudgetMode, EpisodeEntry, ValidationEntry, IntentDecision, TokenBudget } from "./schemas";
 import * as path from "path";
 
 export class MemorySystemAPI {
@@ -51,7 +51,7 @@ export class MemorySystemAPI {
     return await this.contextBuilder.build(taskId, objective, taskType, mode, targetScope);
   }
 
-  async expand_handle(handle: string, budget: any): Promise<string | null> {
+  async expand_handle(handle: string, budget: TokenBudget): Promise<string | null> {
     return await this.resolver.expandHandle(handle, budget);
   }
 

@@ -36,6 +36,7 @@ async function main() {
   delete process.env.MIMIR_ALLOW_UNSAFE_SECRET_RECORDING;
 
   const dbFile = path.join(os.tmpdir(), `mimir-smoke-${Date.now()}.db`);
+  try {
   const memory = new MemorySystemAPI();
   await memory.init(dbFile);
 
@@ -201,13 +202,14 @@ async function main() {
   await memory.delete_memory("intent", "SMOKE_DUP_A");
   ok("delete_memory intent", !(await memory.storage.getIntents()).some((i) => i.id === "SMOKE_DUP_A"));
 
-  try {
-    fs.unlinkSync(dbFile);
-  } catch {
-    /* ignore */
-  }
-
   console.log(failures === 0 ? "\n=== ALL SMOKE CHECKS PASSED ===" : "\n=== SMOKE FAILED ===");
+  } finally {
+    try {
+      fs.unlinkSync(dbFile);
+    } catch {
+      /* ignore */
+    }
+  }
   process.exit(failures === 0 ? 0 : 1);
 }
 

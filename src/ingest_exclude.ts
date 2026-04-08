@@ -23,7 +23,7 @@ export function shouldExcludeFromIngest(absPath: string): boolean {
   const parts = norm.split("/");
   for (const p of parts) {
     if (SEGMENTS.has(p)) return true;
-    if (p === "generated" || p.endsWith(".egg-info")) return true;
+    if (p.endsWith(".egg-info")) return true;
   }
   return false;
 }

@@ -163,7 +163,6 @@ export class RepoCartographer {
       "coverage",
       "vendor",
       "__generated__",
-      "generated",
     ]);
     const pyPaths: string[] = [];
     walkPyFiles(rootAbs, skip, pyPaths);

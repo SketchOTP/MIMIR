@@ -39,7 +39,7 @@ export function scanRecordedPayload(label: string, payload: unknown): SecretScan
   collectStrings(payload, strings);
   const blob = strings.join("\n");
   for (const { label: L, re } of PATTERNS) {
-    re.lastIndex = 0;
+    if (re.global) re.lastIndex = 0;
     if (re.test(blob)) {
       return {
         ok: false,

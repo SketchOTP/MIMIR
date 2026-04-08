@@ -24,6 +24,21 @@ function pickProvenance(v: Record<string, unknown>): RecordProvenance | undefine
   return Object.keys(p).length > 0 ? p : undefined;
 }
 
+function strArr(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x));
+}
+
+function episodeVerdict(v: unknown): "PASS" | "FAIL" | "ERROR" | "PENDING" {
+  if (v === "PASS" || v === "FAIL" || v === "ERROR" || v === "PENDING") return v;
+  return "ERROR";
+}
+
+function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
+  if (v === "PASS" || v === "FAIL" || v === "PENDING") return v;
+  return "PENDING";
+}
+
 /** Stable DB location: default is <MIMIR repo root>/mimir.db (parent of src/), not process.cwd() (Cursor varies cwd). */
 function resolveMcpDbPath(): string {
   const fromEnv = process.env.MIMIR_DB_PATH?.trim();
@@ -241,7 +256,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     if (name === "mimir_ingest") {
-      const { path: repoPath } = args as any;
+      const repoPath = (args as Record<string, unknown>)?.path;
+      if (typeof repoPath !== "string" || !repoPath.trim()) {
+        throw new Error("mimir_ingest requires a non-empty string path");
+      }
       const root = path.resolve(repoPath);
       await memory.ingest_repo(root);
       const nodeCount = await memory.storage.countStructuralNodes();
@@ -255,17 +273,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } 
     
     else if (name === "mimir_build_packet") {
-      const { task_id, objective, task_type, mode, symbols, files } = args as any;
+      const p = args as Record<string, unknown>;
+      const task_id = p.task_id;
+      const objective = p.objective;
+      const task_type = p.task_type;
+      const mode = p.mode;
+      if (typeof task_id !== "string" || typeof objective !== "string") {
+        throw new Error("mimir_build_packet requires task_id and objective strings");
+      }
+      if (typeof task_type !== "string" || typeof mode !== "string") {
+        throw new Error("mimir_build_packet requires task_type and mode strings");
+      }
+      const symbols = strArr(p.symbols);
+      const files = strArr(p.files);
       const packetYaml = await memory.build_context_packet(
-        task_id, objective, task_type as TaskType, mode as BudgetMode, { symbols, files }
+        task_id,
+        objective,
+        task_type as TaskType,
+        mode as BudgetMode,
+        { symbols, files }
       );
       return { content: [{ type: "text", text: packetYaml }] };
     } 
     
     else if (name === "mimir_expand_handle") {
-      const { handle, mode } = args as any;
+      const ex = args as Record<string, unknown>;
+      const handle = ex.handle;
+      const mode = ex.mode;
+      if (typeof handle !== "string" || !handle.trim()) {
+        throw new Error("mimir_expand_handle requires a non-empty handle string");
+      }
+      const modes: BudgetMode[] = ["scout", "operate", "investigate", "forensics"];
+      if (typeof mode !== "string" || !modes.includes(mode as BudgetMode)) {
+        throw new Error("mimir_expand_handle requires mode: scout | operate | investigate | forensics");
+      }
       const budget = memory.tokenGovernor.createBudget(mode as BudgetMode);
-      // Hack to allow expansion, ideally we pass the budget state, but for a stateless tool call we estimate fresh
       const expanded = await memory.expand_handle(handle, budget);
       if (expanded) {
          return { content: [{ type: "text", text: expanded }] };
@@ -281,17 +323,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       await memory.record_episode({
         task_id: String(ep.task_id),
         timestamp: new Date().toISOString(),
-        objective: String(ep.objective),
-        assumptions: ep.assumptions as string[],
-        files_touched: ep.files_touched as string[],
-        commands_run: ep.commands_run as string[],
-        outputs_summarized: String(ep.outputs_summarized),
-        tests_run: ep.tests_run as string[],
-        verdicts: ep.verdicts as "PASS" | "FAIL" | "ERROR" | "PENDING",
-        failed_hypotheses: ep.failed_hypotheses as string[],
+        objective: String(ep.objective ?? ""),
+        assumptions: strArr(ep.assumptions),
+        files_touched: strArr(ep.files_touched),
+        commands_run: strArr(ep.commands_run),
+        outputs_summarized: String(ep.outputs_summarized ?? ""),
+        tests_run: strArr(ep.tests_run),
+        verdicts: episodeVerdict(ep.verdicts),
+        failed_hypotheses: strArr(ep.failed_hypotheses),
         accepted_solution: typeof ep.accepted_solution === "string" ? ep.accepted_solution : undefined,
-        residual_risks: ep.residual_risks as string[],
-        next_best_action: String(ep.next_best_action),
+        residual_risks: strArr(ep.residual_risks),
+        next_best_action: String(ep.next_best_action ?? ""),
         provenance: prov,
       });
       return { content: [{ type: "text", text: `Successfully recorded episode for task ${ep.task_id}.` }] };
@@ -329,7 +371,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         known_failure_signatures: Array.isArray(v.known_failure_signatures)
           ? (v.known_failure_signatures as string[])
           : [],
-        last_run_verdict: (v.last_run_verdict as ValidationEntry["last_run_verdict"]) ?? "PENDING",
+        last_run_verdict: validationVerdict(v.last_run_verdict),
         last_run_timestamp:
           typeof v.last_run_timestamp === "string" && v.last_run_timestamp.length > 0
             ? v.last_run_timestamp
@@ -351,16 +393,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     else if (name === "mimir_query_memory") {
       const q = args as Record<string, unknown>;
-      const filter = (q.filter as "all" | "intents" | "validations" | "episodes") || "all";
-      const limit = typeof q.limit === "number" && !Number.isNaN(q.limit) ? q.limit : 40;
+      const f = q.filter;
+      const filter: "all" | "intents" | "validations" | "episodes" =
+        f === "intents" || f === "validations" || f === "episodes" || f === "all" ? f : "all";
+      let limit = typeof q.limit === "number" && !Number.isNaN(q.limit) ? q.limit : 40;
+      if (typeof q.limit === "string" && q.limit.trim()) {
+        const n = Number(q.limit);
+        if (!Number.isNaN(n)) limit = n;
+      }
+      limit = Math.min(200, Math.max(1, limit));
       const json = await memory.query_memory(filter, limit);
       return { content: [{ type: "text", text: json }] };
     }
 
     else if (name === "mimir_delete_memory") {
       const d = args as Record<string, unknown>;
-      const kind = d.kind as "intent" | "validation" | "episode";
-      const id = String(d.id);
+      const k = d.kind;
+      if (k !== "intent" && k !== "validation" && k !== "episode") {
+        throw new Error("mimir_delete_memory requires kind: intent | validation | episode");
+      }
+      const kind = k;
+      const id = String(d.id ?? "");
+      if (!id.trim()) throw new Error("mimir_delete_memory requires non-empty id");
       await memory.delete_memory(kind, id);
       return { content: [{ type: "text", text: `Deleted ${kind} ${id}.` }] };
     }
