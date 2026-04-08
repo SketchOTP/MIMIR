@@ -9,6 +9,7 @@ import * as path from "path";
 import { MemorySystemAPI } from "./index";
 import { scanRecordedPayload } from "./secrets";
 import { readLiveGitHead } from "./git_util";
+import { applyCiResult } from "./ci_apply";
 
 let failures = 0;
 function ok(name: string, cond: boolean, detail?: string) {
@@ -173,6 +174,27 @@ async function main() {
   const sel2 = packet2.selection_meta as Record<string, unknown> | undefined;
   const cont2 = sel2?.continuation as Record<string, unknown> | undefined;
   ok("second packet same_task_as_previous", cont2?.same_task_as_previous === true);
+
+  const recallOut = await memory.recall_similar("MemorySystemAPI smoke duplicate constraint", 8);
+  ok("recall_similar", recallOut.includes('"hits"'));
+
+  const deltaYaml = await memory.build_context_packet(
+    "T-smoke",
+    "smoke test objective mentions duplicate and constraint",
+    "bug_fix",
+    "scout",
+    { symbols: ["MemorySystemAPI"], files: [path.join(repoRoot, "src", "index.ts")] },
+    { packetMode: "delta" }
+  );
+  ok("delta packet", deltaYaml.includes("delta") && deltaYaml.includes("packet_mode"));
+
+  const teamJ = await memory.team_ledger_export();
+  await memory.team_ledger_import(teamJ);
+  ok("team ledger roundtrip", teamJ.includes('"version": 1') && teamJ.includes("SMOKE_HARD"));
+
+  await applyCiResult(memory.storage, { validation_id: "SMOKE_TEST_1", verdict: "PASS" });
+  const vci = (await memory.storage.getValidations()).find((x) => x.id === "SMOKE_TEST_1");
+  ok("ci_apply validation", vci?.last_run_verdict === "PASS");
 
   const budget = memory.tokenGovernor.createBudget("scout");
   const nodes = await memory.storage.getStructuralNodes();

@@ -1,0 +1,7 @@
+# Copy to .mimir/ci-mapping.yaml in your app repo. Maps CI job names to validation_registry ids.
+# Used by: npm run ci-ingest (with GITHUB_JOB) or set MIMIR_VALIDATION_ID explicitly.
+validations:
+  - ci_job_name: test
+    validation_id: my_integration_test_id
+  - ci_job_name: lint
+    validation_id: eslint_suite

@@ -15,6 +15,14 @@ import {
   SubsystemCard,
   TraceEntry,
 } from "./schemas";
+import type { BuildPacketOptions } from "./context_builder";
+import {
+  exportTeamLedgerJson,
+  exportTeamLedgerToFile,
+  importTeamLedgerFromFile,
+  importTeamLedgerJson,
+} from "./team_ledger";
+import { recallSimilar as recallSimilarSearch } from "./recall_tfidf";
 import * as path from "path";
 
 export class MemorySystemAPI {
@@ -38,6 +46,26 @@ export class MemorySystemAPI {
 
   async init(dbPath: string = "memory.db") {
     await this.storage.init(dbPath);
+    const teamImport = process.env.MIMIR_TEAM_LEDGER_IMPORT?.trim();
+    if (teamImport) {
+      try {
+        await importTeamLedgerFromFile(this.storage, teamImport);
+        console.error(`[mimir] imported team ledger from ${teamImport}`);
+      } catch (e) {
+        console.error(`[mimir] MIMIR_TEAM_LEDGER_IMPORT failed:`, e);
+      }
+    }
+  }
+
+  private async maybeExportTeamLedger(): Promise<void> {
+    const p = process.env.MIMIR_TEAM_LEDGER_EXPORT_PATH?.trim();
+    if (p) {
+      try {
+        await exportTeamLedgerToFile(this.storage, p);
+      } catch (e) {
+        console.error(`[mimir] MIMIR_TEAM_LEDGER_EXPORT_PATH failed:`, e);
+      }
+    }
   }
 
   async ingest_repo(path: string): Promise<void> {
@@ -50,14 +78,37 @@ export class MemorySystemAPI {
 
   async record_validation(result: ValidationEntry): Promise<void> {
     await this.storage.saveValidation(result);
+    await this.maybeExportTeamLedger();
   }
 
   async record_decision(decision: IntentDecision): Promise<void> {
     await this.storage.saveIntent(decision);
+    await this.maybeExportTeamLedger();
   }
 
-  async build_context_packet(taskId: string, objective: string, taskType: TaskType, mode: BudgetMode, targetScope: { symbols: string[], files: string[] }): Promise<string> {
-    return await this.contextBuilder.build(taskId, objective, taskType, mode, targetScope);
+  async build_context_packet(
+    taskId: string,
+    objective: string,
+    taskType: TaskType,
+    mode: BudgetMode,
+    targetScope: { symbols: string[]; files: string[] },
+    options?: BuildPacketOptions
+  ): Promise<string> {
+    return await this.contextBuilder.build(taskId, objective, taskType, mode, targetScope, options);
+  }
+
+  async recall_similar(query: string, top_k: number): Promise<string> {
+    const hits = await recallSimilarSearch(this.storage, query, top_k);
+    return JSON.stringify({ query, top_k, hits }, null, 2);
+  }
+
+  async team_ledger_export(): Promise<string> {
+    return exportTeamLedgerJson(this.storage);
+  }
+
+  async team_ledger_import(json: string): Promise<void> {
+    await importTeamLedgerJson(this.storage, json);
+    await this.maybeExportTeamLedger();
   }
 
   async expand_handle(handle: string, budget: TokenBudget): Promise<string | null> {

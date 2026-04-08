@@ -55,6 +55,8 @@ export interface ContextSelectionMeta {
     subsystems: number;
   };
   ranking: "relevance_v1";
+  /** full = complete packet; delta = handle-level diff vs last snapshot for this task_id. */
+  packet_mode?: "full" | "delta";
 }
 
 export interface ContextPacket {

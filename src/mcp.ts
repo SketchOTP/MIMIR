@@ -17,6 +17,9 @@ import {
 } from "./schemas";
 import { scanRecordedPayload } from "./secrets";
 import * as path from "path";
+import { resolveMcpDbPath } from "./mcp_db_path";
+import { applyCiResult } from "./ci_apply";
+import type { BuildPacketOptions } from "./context_builder";
 
 function guardSecrets(label: string, payload: unknown): void {
   const r = scanRecordedPayload(label, payload);
@@ -47,18 +50,11 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
   return "PENDING";
 }
 
-/** Stable DB location: default is <MIMIR repo root>/mimir.db (parent of src/), not process.cwd() (Cursor varies cwd). */
-function resolveMcpDbPath(): string {
-  const fromEnv = process.env.MIMIR_DB_PATH?.trim();
-  if (fromEnv) return path.resolve(fromEnv);
-  return path.join(path.dirname(__dirname), "mimir.db");
-}
-
 // Define the core MCP Server
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "3.1.0",
+    version: "4.0.0",
   },
   {
     capabilities: {
@@ -120,6 +116,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "array",
               items: { type: "string" },
               description: "Absolute or project-relative paths to relevant files.",
+            },
+            packet_mode: {
+              type: "string",
+              enum: ["full", "delta"],
+              description:
+                "full = complete YAML packet; delta = handle-level diff vs last snapshot for this task_id (smaller follow-up).",
+            },
+            include_git_path_diff: {
+              type: "boolean",
+              description:
+                "When packet_mode=delta and repo was ingested: include git_path_changes since ingest HEAD.",
             },
           },
           required: ["task_id", "objective", "task_type", "mode", "symbols", "files"],
@@ -294,6 +301,51 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "mimir_recall_similar",
+        description:
+          "TF–IDF style similarity search over intent descriptions and episode text (offline, no embeddings API). Returns top_k refs with scores.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Natural language query (e.g. failure symptom)." },
+            top_k: { type: "number", description: "Number of hits (default 8, max 50)." },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "mimir_apply_ci_result",
+        description:
+          "Upserts a validation row from CI: verdict + optional provenance. Use with .mimir/ci-mapping.yaml + ci-ingest script, or call directly.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            validation_id: { type: "string" },
+            verdict: { type: "string", enum: ["PASS", "FAIL", "PENDING"] },
+            commit_sha: { type: "string" },
+            ci_run_url: { type: "string" },
+            ci_run_id: { type: "string" },
+          },
+          required: ["validation_id", "verdict"],
+        },
+      },
+      {
+        name: "mimir_team_ledger_export",
+        description: "Returns JSON export of intents + validations for team sharing (paste to file or VCS).",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "mimir_team_ledger_import",
+        description: "Merges a prior mimir_team_ledger_export JSON into this DB (INSERT OR REPLACE per row).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ledger_json: { type: "string", description: "Full JSON string from mimir_team_ledger_export." },
+          },
+          required: ["ledger_json"],
+        },
+      },
+      {
         name: "mimir_run_gc",
         description:
           "Episodic consolidation: repeated failed hypotheses become AUTO_RULE_* intents, episodes purged, and a line appended to global lesson hints.",
@@ -342,12 +394,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       const symbols = strArr(p.symbols);
       const files = strArr(p.files);
+      const pm = p.packet_mode;
+      const packetMode: BuildPacketOptions["packetMode"] =
+        pm === "delta" ? "delta" : "full";
+      const opts: BuildPacketOptions = {
+        packetMode,
+        includeGitPathDiff: p.include_git_path_diff === true,
+      };
       const packetYaml = await memory.build_context_packet(
         task_id,
         objective,
         task_type as TaskType,
         mode as BudgetMode,
-        { symbols, files }
+        { symbols, files },
+        opts
       );
       return { content: [{ type: "text", text: packetYaml }] };
     } 
@@ -522,6 +582,53 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!id.trim()) throw new Error("mimir_delete_memory requires non-empty id");
       await memory.delete_memory(kind, id);
       return { content: [{ type: "text", text: `Deleted ${kind} ${id}.` }] };
+    }
+
+    else if (name === "mimir_recall_similar") {
+      const r = args as Record<string, unknown>;
+      const query = String(r.query ?? "");
+      if (!query.trim()) throw new Error("mimir_recall_similar requires query");
+      let k = typeof r.top_k === "number" && !Number.isNaN(r.top_k) ? r.top_k : 8;
+      k = Math.min(50, Math.max(1, k));
+      guardSecrets("mimir_recall_similar", { query });
+      const json = await memory.recall_similar(query, k);
+      return { content: [{ type: "text", text: json }] };
+    }
+
+    else if (name === "mimir_apply_ci_result") {
+      const c = args as Record<string, unknown>;
+      guardSecrets("mimir_apply_ci_result", c);
+      await applyCiResult(memory.storage, {
+        validation_id: String(c.validation_id),
+        verdict: validationVerdict(c.verdict),
+        commit_sha: typeof c.commit_sha === "string" ? c.commit_sha : undefined,
+        ci_run_url: typeof c.ci_run_url === "string" ? c.ci_run_url : undefined,
+        ci_run_id: typeof c.ci_run_id === "string" ? c.ci_run_id : undefined,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Applied CI result for validation ${String(c.validation_id)} (${String(c.verdict)}).`,
+          },
+        ],
+      };
+    }
+
+    else if (name === "mimir_team_ledger_export") {
+      const json = await memory.team_ledger_export();
+      return { content: [{ type: "text", text: json }] };
+    }
+
+    else if (name === "mimir_team_ledger_import") {
+      const t = args as Record<string, unknown>;
+      const ledger_json = t.ledger_json;
+      if (typeof ledger_json !== "string" || !ledger_json.trim()) {
+        throw new Error("mimir_team_ledger_import requires ledger_json string");
+      }
+      guardSecrets("mimir_team_ledger_import", { ledger_json });
+      await memory.team_ledger_import(ledger_json);
+      return { content: [{ type: "text", text: "Team ledger merged into local database." }] };
     }
 
     else if (name === "mimir_run_gc") {

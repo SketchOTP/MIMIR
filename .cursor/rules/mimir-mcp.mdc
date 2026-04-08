@@ -20,7 +20,10 @@ Memory and coding context for this workspace are governed by the **Mimir MCP**. 
 | Tool | When |
 |------|------|
 | `mimir_ingest` | **Required** for graph-backed context on a codebase: pass the **absolute path** to that project’s root (not automatic when Mimir is “installed”). Re-ingest after large refactors if the graph may be stale. |
-| `mimir_build_packet` | **Start** of every new task, bugfix, or feature (see below). |
+| `mimir_build_packet` | **Start** of every new task, bugfix, or feature (see below). Optional **`packet_mode`**: `full` (default) or **`delta`** (YAML diff vs last packet for this `task_id`); optional **`include_git_path_diff`** for paths changed since ingest HEAD. |
+| `mimir_recall_similar` | **Offline** TF–IDF-style similarity over intents and episodes (no embedding API). Use when you need related past work without a full packet. |
+| `mimir_apply_ci_result` | Map CI job env (or explicit validation id) via **`.mimir/ci-mapping.yaml`** and record a validation outcome from automation. |
+| `mimir_team_ledger_export` / `mimir_team_ledger_import` | Export or merge team ledger JSON (intents + validations). Env: **`MIMIR_TEAM_LEDGER_IMPORT`** merges at init; **`MIMIR_TEAM_LEDGER_EXPORT_PATH`** auto-exports after intent/validation writes. |
 | `mimir_expand_handle` | Whenever the packet lists handles you must apply (`RULE:…`, `TEST:…`, `SUBSYSTEM:…`, `SYMBOL:…`, `ATTEMPT:…`, etc.)—**do not guess** their meaning. |
 | `mimir_record_episode` | **End** of work or when stopping on a dead end (see below). |
 | `mimir_record_decision` | When you establish or change a durable rule, invariant, or non-goal for this codebase. |
@@ -43,6 +46,7 @@ Before writing code or giving deep architectural answers:
    - **`mode`**: start with **`scout`**; move to **`operate`**, **`investigate`**, or **`forensics`** only if the packet or handles require deeper token budget.
    - **`symbols`**: best-effort seeds (including `SYMBOL:path::Name` forms after ingest).
    - **`files`**: relevant absolute or project-relative paths.
+   - Optional **`packet_mode`**: use **`delta`** for a smaller YAML diff when you already built a full packet for this `task_id`; first build is still full. Optional **`include_git_path_diff`**: list repo paths changed since ingest HEAD (needs ingest metadata).
 3. Read the full **YAML Context Packet** output. Treat **`constraints`**, **`invariants`**, **`subsystem_cards`**, **`lesson_hints`**, **`selection_meta`** (**`ingest_freshness`**, **`continuation`**), and **`open_questions`** (duplicate-intent hints) as first-class inputs.
 
 Do not skip this phase for substantive work when Mimir is available.
@@ -75,3 +79,4 @@ If the same wrong hypothesis repeats across episodes, consider **`mimir_run_gc`*
 - Secrets and one-off credentials must **not** be written into Mimir fields; describe them obliquely if needed. The server **rejects** common secret patterns in writes unless **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`** is set (avoid).
 - Graph **`FILE:`** / **`SYMBOL:`** expansion requires those nodes to exist: run **`mimir_ingest`** on the **absolute** project root after checkout or Mimir upgrades. Use handle forms from the packet (`SYMBOL:relative/path.py::symbol`); `SYMBOL:pkg.module::name` is not a valid graph id unless ingested that way.
 - If ingest reports success but **`mimir_expand_handle`** still fails for `FILE:`/`SYMBOL:`, check the ingest response for **`structural_graph nodes: N`** and **`database: /path/to/mimir.db`**. **`N = 0`** means no graph was indexed (wrong path or unreadable tree). **`MIMIR_DB_PATH`** overrides where state is stored; the MCP logs **`[mimir-mcp] database: ...`** on stderr.
+- **CI ingestion** from a job: configure **`.mimir/ci-mapping.yaml`** (see **`.mimir/ci-mapping.example.yaml`**) and run **`npm run ci-ingest`** with **`CI_VERDICT`**, **`MIMIR_VALIDATION_ID`** or **`GITHUB_JOB`**, and optional **`GITHUB_SHA`** / run metadata. **`mimir_apply_ci_result`** is the MCP equivalent when the process can call tools directly.

@@ -11,6 +11,13 @@ import {
   normalizeFsPath,
 } from "./relevance";
 import { readLiveGitHead } from "./git_util";
+import { gitDiffNameOnlySinceRef } from "./git_diff_paths";
+import {
+  snapshotFromPacket,
+  diffSnapshots,
+  snapshotMetadataKey,
+  PacketHandleSnapshot,
+} from "./packet_snapshot";
 import * as yaml from "js-yaml";
 
 function intentHandle(intent: IntentDecision): string {
@@ -62,16 +69,23 @@ function duplicateIntentNotes(intents: IntentDecision[]): string[] {
   return out.slice(0, 6);
 }
 
+export type BuildPacketOptions = {
+  packetMode?: "full" | "delta";
+  /** When packetMode=delta and ingest exists: list paths changed since stored ingest git HEAD. */
+  includeGitPathDiff?: boolean;
+};
+
 export class ContextPacketBuilder {
   constructor(private storage: StorageLayer, private governor: TokenGovernor) {}
 
-  async build(
+  /** Builds the full in-memory packet (ranking, budgets, graph slice). */
+  async buildPacketObject(
     taskId: string,
     objective: string,
     taskType: TaskType,
     mode: BudgetMode,
     targetScope: { symbols: string[]; files: string[] }
-  ): Promise<string> {
+  ): Promise<ContextPacket> {
     const budget = this.governor.createBudget(mode);
     const files = targetScope.files.map((f) => normalizeFsPath(f));
     const symbols = targetScope.symbols;
@@ -270,7 +284,75 @@ export class ContextPacketBuilder {
     packet.selection_meta.omitted.graph_symbols = Math.max(0, graphCandidates.length - graphAdded);
 
     packet.token_budget = budget;
+    return packet;
+  }
+
+  async build(
+    taskId: string,
+    objective: string,
+    taskType: TaskType,
+    mode: BudgetMode,
+    targetScope: { symbols: string[]; files: string[] },
+    options?: BuildPacketOptions
+  ): Promise<string> {
+    const packet = await this.buildPacketObject(taskId, objective, taskType, mode, targetScope);
+    packet.selection_meta.packet_mode = "full";
+
+    const snap = snapshotFromPacket(packet);
+    const snapKey = snapshotMetadataKey(taskId);
+    const ingestRoot = await this.storage.getMetadata("ingest_root");
+    const gitHead = await this.storage.getMetadata("git_head");
+
     await this.storage.setMetadata("last_context_packet_task_id", taskId);
+
+    const modeOpt = options?.packetMode ?? "full";
+    if (modeOpt === "delta") {
+      const prevRaw = await this.storage.getMetadata(snapKey);
+      let prev: PacketHandleSnapshot | null = null;
+      if (prevRaw && prevRaw.length > 0) {
+        try {
+          prev = JSON.parse(prevRaw) as PacketHandleSnapshot;
+        } catch {
+          prev = null;
+        }
+      }
+
+      await this.storage.setMetadata(snapKey, JSON.stringify(snap));
+
+      if (!prev) {
+        packet.selection_meta.packet_mode = "full";
+        return yaml.dump(
+          {
+            ...packet,
+            note: "No prior snapshot for this task_id; saved snapshot. Treat as full packet.",
+          },
+          { skipInvalid: true, noRefs: true }
+        );
+      }
+
+      const delta = diffSnapshots(prev, snap);
+      let git_path_changes: string[] | undefined;
+      if (options?.includeGitPathDiff && ingestRoot && gitHead && gitHead.length > 0) {
+        git_path_changes = gitDiffNameOnlySinceRef(ingestRoot, gitHead);
+      }
+
+      const deltaDoc: Record<string, unknown> = {
+        task_id: taskId,
+        task_type: taskType,
+        objective,
+        packet_mode: "delta",
+        delta,
+        token_budget: packet.token_budget,
+        selection_meta: {
+          ...packet.selection_meta,
+          packet_mode: "delta",
+        },
+      };
+      if (git_path_changes !== undefined) deltaDoc.git_path_changes = git_path_changes;
+      return yaml.dump(deltaDoc, { skipInvalid: true, noRefs: true });
+    }
+
+    await this.storage.setMetadata(snapKey, JSON.stringify(snap));
     return yaml.dump(packet, { skipInvalid: true, noRefs: true });
   }
 }
