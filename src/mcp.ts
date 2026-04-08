@@ -21,6 +21,7 @@ import { resolveMcpDbPath } from "./mcp_db_path";
 import { applyCiResult } from "./ci_apply";
 import type { BuildPacketOptions } from "./context_builder";
 import { osDisplayName } from "./platform";
+import { mirrorRelFromVaultRoot, projectSlugForWiki } from "./obsidian_sync";
 
 function guardSecrets(label: string, payload: unknown): void {
   const r = scanRecordedPayload(label, payload);
@@ -55,7 +56,7 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "4.0.3",
+    version: "4.0.4",
   },
   {
     capabilities: {
@@ -73,8 +74,9 @@ async function initMemory() {
   console.error(`[mimir-mcp] database: ${dbPath}`);
   const obs = process.env.MIMIR_OBSIDIAN_VAULT_PATH?.trim();
   if (obs) {
-    const base = process.env.MIMIR_OBSIDIAN_BASE?.trim() || "Mimir";
-    console.error(`[mimir-mcp] obsidian mirror: ${obs} (base: ${base})`);
+    console.error(
+      `[mimir-mcp] obsidian wiki: ${obs} → ${mirrorRelFromVaultRoot()} (project: ${projectSlugForWiki()})`
+    );
   }
 }
 

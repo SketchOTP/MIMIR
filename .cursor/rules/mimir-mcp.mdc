@@ -160,8 +160,10 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING`** | `1` = bypass secret scan on writes (avoid). |
 | **`MIMIR_TEAM_LEDGER_IMPORT`** | JSON file merged at init. |
 | **`MIMIR_TEAM_LEDGER_EXPORT_PATH`** | Auto-rewrite after decision/validation writes. |
-| **`MIMIR_OBSIDIAN_VAULT_PATH`** | Absolute Obsidian vault root — mirrors episodes, intents, validations, subsystems, traces as Markdown + wikilinks (optional). |
-| **`MIMIR_OBSIDIAN_BASE`** | Subfolder in vault (default **`Mimir`**). **SQLite stays canonical.** |
+| **`MIMIR_OBSIDIAN_VAULT_PATH`** | Absolute Obsidian vault — WIKI mirror (Markdown + wikilinks). **SQLite stays canonical.** |
+| **`MIMIR_OBSIDIAN_PROJECT_SLUG`** | Per-project folder under `10_KGRAPH/KG/` (default **`mimir`**). |
+| **`MIMIR_OBSIDIAN_MIRROR_REL`** | Override mirror root under vault. |
+| **`MIMIR_OBSIDIAN_BASE`** | Legacy flat folder under vault if mirror rel unset. |
 
 Shell syntax differs by OS; for copy-paste env examples run **`npm run install:hints`** in the Mimir repo.
 
@@ -174,7 +176,7 @@ Shell syntax differs by OS; for copy-paste env examples run **`npm run install:h
 - **Secrets**: do not paste keys/tokens into Mimir fields; server blocks common patterns unless **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`**.
 - **`N = 0` nodes** after ingest: fix **absolute path**, ensure sources exist, re-ingest.
 - **Subsystem id**: use **`SUBSYSTEM:Name`** form for **`mimir_record_subsystem_card`**.
-- **Obsidian mirror:** if **`MIMIR_OBSIDIAN_VAULT_PATH`** is set, writes also land in the vault for graph view; **`mimir_run_gc`** / bulk **`team_ledger_import`** do not sync in v4.0.3.
+- **Obsidian WIKI:** if **`MIMIR_OBSIDIAN_VAULT_PATH`** is set, writes land under **`10_KGRAPH/KG/<slug>/`** (and **`01_PROJECTS/<slug>.md`** stub); **`mimir_run_gc`** / bulk **`team_ledger_import`** do not sync in v4.0.4.
 
 ---
 

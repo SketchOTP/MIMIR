@@ -128,7 +128,7 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.3**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.4**.
 
 ### Install vs. ingest
 
@@ -213,15 +213,24 @@ Single SQLite file:
 
 Stderr on start: `[mimir-mcp] platform: …` then `[mimir-mcp] database: /path/to/mimir.db`.
 
-### Obsidian vault mirror (optional)
+### Obsidian WIKI mirror (optional)
 
-Mimir can **mirror** ledger writes into an [Obsidian](https://obsidian.md/) vault as Markdown with **wikilinks**, so Obsidian’s **graph view** connects tasks, episodes, intents, validations, subsystems, and traces.
+**SQLite (`mimir.db`) stays the source of truth.** Obsidian is a **per-project WIKI**: Markdown + wikilinks for graph view, search, and reading—not a replacement database.
 
-- **SQLite stays canonical** for MCP queries, packets, and recall. The vault is a **read-friendly projection** (search, backlinks, manual notes).
-- Set **`MIMIR_OBSIDIAN_VAULT_PATH`** to the **absolute path** of your vault root (the folder that contains `.obsidian` or will).
-- Optional **`MIMIR_OBSIDIAN_BASE`**: subfolder inside the vault (default **`Mimir`**). Notes go under `<vault>/<base>/Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, plus **`MOC.md`**.
-- **Episodes** link to a **task hub** (`Tasks/<task_id>.md`) and to **validations** listed in `tests_run`.
-- **Limitations:** **`mimir_team_ledger_import`** and **`mimir_run_gc`** (AUTO_RULE synthesis) do not automatically sync to Obsidian in this version; new rows from those paths appear in SQLite only unless recorded again through the normal tools.
+**Default layout** (no extra env beyond the vault path):
+
+- **Mirror root:** `<vault>/10_KGRAPH/KG/<project_slug>/` with `Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, and **`MOC.md`**.
+- **Project slug:** **`MIMIR_OBSIDIAN_PROJECT_SLUG`** (default **`mimir`**). Use another repo’s slug when that project uses the same vault.
+- **Registry stub:** **`01_PROJECTS/<slug>.md`** is created if missing (links into the KG mirror).
+
+**Overrides:**
+
+- **`MIMIR_OBSIDIAN_MIRROR_REL`** — full path under the vault (e.g. `Mimir` or `10_KGRAPH/KG/custom`). Wins over defaults.
+- **`MIMIR_OBSIDIAN_BASE`** — legacy alias: if set and **`MIMIR_OBSIDIAN_MIRROR_REL`** is unset, mirror root is `<vault>/<BASE>` (e.g. `Mimir` for the old flat layout).
+
+Set **`MIMIR_OBSIDIAN_VAULT_PATH`** to your vault root (e.g. `N:\WIKI\atlas_wiki\vault`).
+
+**Limitations:** **`mimir_team_ledger_import`** and **`mimir_run_gc`** (AUTO_RULE) do not sync to Obsidian in this version unless rows are written again through the normal MCP tools.
 
 ### Environment variables (reference)
 
@@ -233,8 +242,10 @@ Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAM
 | `MIMIR_ALLOW_UNSAFE_SECRET_RECORDING` | Set to `1` to allow secret-like strings in MCP writes (not recommended). |
 | `MIMIR_TEAM_LEDGER_IMPORT` | Absolute path to JSON file merged at **`init`** (intents + validations). |
 | `MIMIR_TEAM_LEDGER_EXPORT_PATH` | Absolute path; rewritten after decision/validation writes when set. |
-| `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute path to Obsidian vault root; enables Markdown mirror + wikilinks (optional). |
-| `MIMIR_OBSIDIAN_BASE` | Subfolder under the vault for Mimir notes (default **`Mimir`**). |
+| `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute path to Obsidian vault root; enables WIKI mirror (optional). |
+| `MIMIR_OBSIDIAN_PROJECT_SLUG` | Folder name under `10_KGRAPH/KG/` (default **`mimir`**). |
+| `MIMIR_OBSIDIAN_MIRROR_REL` | Override mirror root relative to vault (wins over default wiki path). |
+| `MIMIR_OBSIDIAN_BASE` | Legacy: single folder under vault if `MIRROR_REL` unset (e.g. **`Mimir`**). |
 
 **`npm run ci-ingest`** (run from Mimir repo with `ts-node`):
 

@@ -150,7 +150,7 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 
 - **Default DB:** `<MIMIR_repo>/mimir.db` (beside Mimir **`package.json`**), **not** the client cwd.
 - **`MIMIR_DB_PATH`**: absolute override. MCP logs **`[mimir-mcp] platform: …`** and **`[mimir-mcp] database: …`** on stderr.
-- **Obsidian (optional):** **`MIMIR_OBSIDIAN_VAULT_PATH`** mirrors episodes, intents, validations, subsystems, and traces into Markdown + wikilinks under **`MIMIR_OBSIDIAN_BASE`** (default `Mimir`). SQLite remains canonical.
+- **Obsidian WIKI (optional):** **`MIMIR_OBSIDIAN_VAULT_PATH`** mirrors ledger rows as Markdown under **`10_KGRAPH/KG/<MIMIR_OBSIDIAN_PROJECT_SLUG||mimir>/`** and stubs **`01_PROJECTS/<slug>.md`**. SQLite remains canonical.
 
 | Variable | Role |
 |----------|------|
@@ -158,8 +158,10 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING`** | `1` = bypass secret scan on writes (avoid). |
 | **`MIMIR_TEAM_LEDGER_IMPORT`** | JSON file merged at init. |
 | **`MIMIR_TEAM_LEDGER_EXPORT_PATH`** | Auto-rewrite after decision/validation writes. |
-| **`MIMIR_OBSIDIAN_VAULT_PATH`** | Obsidian vault root (absolute); enables vault mirror. |
-| **`MIMIR_OBSIDIAN_BASE`** | Subfolder inside vault for notes (default `Mimir`). |
+| **`MIMIR_OBSIDIAN_VAULT_PATH`** | Obsidian vault root (absolute); enables WIKI mirror. |
+| **`MIMIR_OBSIDIAN_PROJECT_SLUG`** | Per-project KG folder under `10_KGRAPH/KG/` (default `mimir`). |
+| **`MIMIR_OBSIDIAN_MIRROR_REL`** | Override mirror path under vault. |
+| **`MIMIR_OBSIDIAN_BASE`** | Legacy flat folder under vault if mirror rel unset. |
 
 Shell syntax differs by OS; for copy-paste env examples run **`npm run install:hints`** in the Mimir repo.
 
@@ -172,7 +174,7 @@ Shell syntax differs by OS; for copy-paste env examples run **`npm run install:h
 - **Secrets**: do not paste keys/tokens into Mimir fields; server blocks common patterns unless **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`**.
 - **`N = 0` nodes** after ingest: fix **absolute path**, ensure sources exist, re-ingest.
 - **Subsystem id**: use **`SUBSYSTEM:Name`** form for **`mimir_record_subsystem_card`**.
-- **Obsidian mirror:** **`MIMIR_OBSIDIAN_VAULT_PATH`** projects ledger writes into the vault; **`mimir_run_gc`** / bulk **`team_ledger_import`** do not sync in v4.0.3.
+- **Obsidian WIKI:** **`MIMIR_OBSIDIAN_VAULT_PATH`** projects ledger writes into the vault (default **`10_KGRAPH/KG/<slug>/`**); **`mimir_run_gc`** / bulk **`team_ledger_import`** do not sync in v4.0.4.
 
 ---
 

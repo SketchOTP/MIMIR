@@ -106,12 +106,14 @@ async function main() {
     provenance: { repo_head_at_close: "deadbeef", ci_run_url: "https://ci.example/job/1" },
   });
 
-  const mocPath = path.join(obsVault, "Mimir", "MOC.md");
-  ok("obsidian mirror MOC", fs.existsSync(mocPath));
-  const epDir = path.join(obsVault, "Mimir", "Episodes");
+  const wikiRoot = path.join(obsVault, "10_KGRAPH", "KG", "mimir");
+  const mocPath = path.join(wikiRoot, "MOC.md");
+  ok("obsidian wiki MOC", fs.existsSync(mocPath));
+  const epDir = path.join(wikiRoot, "Episodes");
   const epFiles = fs.existsSync(epDir) ? fs.readdirSync(epDir) : [];
-  ok("obsidian mirror wrote episode", epFiles.some((f) => f.endsWith(".md")));
-  ok("obsidian task hub", fs.existsSync(path.join(obsVault, "Mimir", "Tasks", "SMOKE_EP_1.md")));
+  ok("obsidian wiki wrote episode", epFiles.some((f) => f.endsWith(".md")));
+  ok("obsidian task hub", fs.existsSync(path.join(wikiRoot, "Tasks", "SMOKE_EP_1.md")));
+  ok("obsidian 01_PROJECTS stub", fs.existsSync(path.join(obsVault, "01_PROJECTS", "mimir.md")));
 
   const repoRoot = path.join(__dirname, "..");
   await memory.ingest_repo(repoRoot);
