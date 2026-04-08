@@ -1,8 +1,19 @@
 # Mimir — Structure-first, token-bounded memory for AI coding
 
+**Repository:** [github.com/SketchOTP/MIMIR](https://github.com/SketchOTP/MIMIR) · **License:** [ISC](https://opensource.org/licenses/ISC) (see `package.json`)
+
 **Current release: 4.x** — YAML context packets, CodeRank-backed graph slices, episodic GC, and MCP tools for ingest, expansion, recording, **delta packets**, **offline similarity recall**, **CI validation hooks**, and **team ledger** import/export.
 
 Mimir keeps **context packets** bounded on large codebases (10k+ files) by combining a **structural graph** (CodeRank centrality, coverage/churn), **YAML** serialization (~30% fewer tokens than JSON), **relevance-ranked** intents/tests/episodes, and **GC** that turns repeated failed hypotheses into durable rules.
+
+## Contents
+
+- [Architecture](#architecture)
+- [Clone, pull, and install](#clone-pull-and-install)
+- [Proof demo](#proof-demo), [smoke tests](#smoke-tests), [npm scripts](#npm-scripts)
+- [Design goals](#design-goals-limits-addressed)
+- [MCP (Cursor and clients)](#mcp-cursor-and-other-clients)
+- [License](#license)
 
 ## Architecture
 
@@ -79,6 +90,20 @@ npm run smoke
 ```
 
 Runs end-to-end checks (ingest, packets, expand handles, ledger ops, delta packets, recall, team ledger roundtrip, CI apply). Expect **`=== ALL SMOKE CHECKS PASSED ===`**.
+
+### npm scripts
+
+Run from the repo root after **`npm ci`**:
+
+| Script | Command | Purpose |
+|--------|---------|---------|
+| **Smoke test** | `npm run smoke` | Full end-to-end validation (recommended after install or before a release). |
+| **Typecheck** | `npm run typecheck` | `tsc --noEmit` — no emit; requires `node_modules` with TypeScript. |
+| **CI ingest** | `npm run ci-ingest -- <repo_root>` | Apply a CI verdict to `validation_registry` (set env vars first; see [Environment variables](#environment-variables-reference)). |
+| **Install hints** | `npm run install:hints` | Prints OS-specific env and path examples (Windows vs Linux/macOS). |
+| **Clean** | `npm run clean` | Deletes `./node_modules` via Node (safe on all platforms). |
+
+The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor as `node …/bin/mimir-mcp.js` (see [MCP](#mcp-cursor-and-other-clients)).
 
 ## Design goals (limits addressed)
 
@@ -205,4 +230,4 @@ Stop MCP, then delete that `mimir.db`, use **`mimir_delete_memory`**, or delete 
 
 ## License
 
-[ISC](https://opensource.org/licenses/ISC) — see `package.json`.
+[ISC](https://opensource.org/licenses/ISC) — see `package.json` (`"license": "ISC"`).
