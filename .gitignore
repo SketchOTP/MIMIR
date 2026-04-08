@@ -6,3 +6,6 @@ node_modules/
 .DS_Store
 Thumbs.db
 .cursor/hooks/state/
+_gh_push.json
+_b1.json
+_b2.json
