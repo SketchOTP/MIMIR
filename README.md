@@ -1,6 +1,8 @@
-# Mimir V2 — Structure-first, token-bounded memory for AI coding
+# Mimir — Structure-first, token-bounded memory for AI coding
 
-Mimir keeps **context packets** strictly bounded on large codebases (10k+ files) by combining a **structural graph** (CodeRank centrality, coverage/churn), **YAML** serialization (~30% fewer tokens than JSON), **relevance-ranked** intents/tests/episodes, and **GC** that turns repeated failed hypotheses into durable rules.
+**Current release: 4.x** — YAML context packets, CodeRank-backed graph slices, episodic GC, and MCP tools for ingest, expansion, recording, **delta packets**, **offline similarity recall**, **CI validation hooks**, and **team ledger** import/export.
+
+Mimir keeps **context packets** bounded on large codebases (10k+ files) by combining a **structural graph** (CodeRank centrality, coverage/churn), **YAML** serialization (~30% fewer tokens than JSON), **relevance-ranked** intents/tests/episodes, and **GC** that turns repeated failed hypotheses into durable rules.
 
 ## Architecture
 
@@ -9,8 +11,11 @@ Mimir keeps **context packets** strictly bounded on large codebases (10k+ files)
 | **Repo cartographer** | Ingests the repo; **CodeRank** (in-degree) highlights core vs. long-tail files. |
 | **Telemetry ingestor** | Execution traces boost node **coverage**; runtime-hit (or failing) paths gain weight vs. unused static dependencies. |
 | **Lifecycle manager** | **Blast-radius invalidation**: changed files mark dependents `STALE_UPSTREAM_CHANGE`. **Episodic consolidation**: GC promotes repeated `failed_hypotheses` to `IntentLedger` rules and trims episodes. |
-| **Context packet builder** | Emits dense **YAML** `ContextPacket`; **subsystem_cards** + ranked intents/tests; **continuation** (same `task_id` as last packet); compares **live `git rev-parse`** to ingest HEAD (`ingest_freshness`); near-duplicate intents; **hard**-bound rules first; **CodeRank** caps graph symbols (**5 / 12 / 24** by mode). |
-| **Storage** | SQLite: graph nodes (`centrality`, `coverage`, `churn`, `status`), intent ledger, episodes, `validation_registry`, area lessons. |
+| **Context packet builder** | Emits dense **YAML** `ContextPacket`; **subsystem_cards** + ranked intents/tests; **continuation** (same `task_id` as last packet); compares **live `git rev-parse`** to ingest HEAD (`ingest_freshness`); near-duplicate intents; **hard**-bound rules first; **CodeRank** caps graph symbols (**5 / 12 / 24** by mode). **v4:** optional **delta** mode (YAML diff vs. last packet for this `task_id`) and optional **git path list** since ingest HEAD. |
+| **Recall (v4)** | **TF–IDF–style** cosine similarity over intent text and episodes — **offline**, no embedding API. |
+| **Team ledger (v4)** | Export/import JSON for intents + validations; optional env-driven merge at startup and auto-export after writes. |
+| **CI hook (v4)** | Map CI job names to `validation_registry` ids via **`.mimir/ci-mapping.yaml`**; script or MCP updates verdicts from CI. |
+| **Storage** | SQLite: graph nodes (`centrality`, `coverage`, `churn`, `status`), intent ledger, episodes, `validation_registry`, area lessons, per-task packet snapshots (for delta). |
 
 **Schemas (high level):** `SubsystemCard` (~100-token domain summaries), `TraceEntry` (telemetry matching), `StructuralNode` (centrality/coverage/churn/status), intents, episodes, validations.
 
@@ -22,18 +27,27 @@ npx ts-node src/index.ts
 
 Demonstrates: YAML packet compression; CodeRank pruning; **episodic GC** (duplicate hypothesis → `AUTO_RULE_*`, episodes purged); **blast-radius** stale marking (e.g. editing `src/schemas.ts` cascades to dependents).
 
+### Smoke tests
+
+```bash
+npm install
+npm run smoke
+```
+
+Runs end-to-end checks (ingest, packets, expand handles, ledger ops, delta packets, recall, team ledger roundtrip, CI apply). Expect **`=== ALL SMOKE CHECKS PASSED ===`**.
+
 ## Design goals (limits addressed)
 
 - **Scale**: Rank by centrality + coverage; don’t dump all dependents — top symbols per budget.
 - **Episodic bloat**: Consolidation collapses many failures into one rule.
-- **Token cost**: YAML packets vs. JSON.
+- **Token cost**: YAML packets vs. JSON; **delta** follow-ups shrink repeat context for the same `task_id`.
 - **Static vs. runtime**: Telemetry can overweight paths that actually run or fail.
 
 ---
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`. Server version **4.0.0**.
 
 ### Install vs. ingest
 
@@ -52,7 +66,7 @@ Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`.
 | Tool | Purpose |
 |------|---------|
 | `mimir_ingest` | Build/update CodeRank graph for a repo path. |
-| `mimir_build_packet` | YAML context packet (task, mode, seeds). |
+| `mimir_build_packet` | YAML context packet (`task_id`, `objective`, `task_type`, `mode`, `symbols`, `files`). Optional **`packet_mode`**: `full` (default) or **`delta`** (diff vs. last snapshot for this `task_id`). Optional **`include_git_path_diff`**: include paths changed since ingest HEAD (requires prior ingest with git metadata). |
 | `mimir_expand_handle` | Expand `RULE:` / `CONSTRAINT:` / … / `TEST:` / `VERIFIER:` / `SUBSYSTEM:` / `ATTEMPT:` / `FILE:` / `SYMBOL:` within token budget. |
 | `mimir_record_episode` | Task outcome, verdicts, failed hypotheses. |
 | `mimir_record_decision` | Intent ledger (RULE, CONSTRAINT, INVARIANT, DECISION, NON_GOAL). |
@@ -61,13 +75,47 @@ Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`.
 | `mimir_record_trace` | Execution trace → boosts **coverage** on matching graph symbols (`telemetry_traces`). |
 | `mimir_query_memory` | JSON snapshot: **`all`** / intents / validations / episodes / **subsystems** / **traces** (capped). |
 | `mimir_delete_memory` | Delete one row: intent, validation, episode, **subsystem**, or **trace** by id. |
+| `mimir_recall_similar` | **Offline** TF–IDF-style similarity over intents + episodes (`query`, optional `top_k`). No embedding API. |
+| `mimir_apply_ci_result` | Upsert a validation by id from CI: **`validation_id`**, **`verdict`** (`PASS` / `FAIL` / `PENDING`), optional provenance fields. |
+| `mimir_team_ledger_export` | Returns JSON export of intents + validations (for files or VCS). |
+| `mimir_team_ledger_import` | Merge a prior export JSON into this DB (`INSERT OR REPLACE` per row). |
 | `mimir_run_gc` | Episodic consolidation (AUTO_RULE synthesis, episode trim). |
 
 **Writes:** MCP blocks obvious **secrets** in recorded text (API keys, PATs, PEM headers, AWS key ids). To override (not recommended): **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`**.
 
 **Ledger extras:** **`mimir_record_decision`** supports **`binding`**: `hard` (surfaced first in packets) vs `soft`, and optional **`reference_url`** (ADR/issue). **`mimir_record_episode`** supports optional **`commit_sha`**, **`ci_run_url`**, **`ci_run_id`**, **`repo_head_at_close`**.
 
-**Packets:** **`subsystem_cards`** lists ranked **`SUBSYSTEM:`** handles. **`selection_meta.continuation`** records **`previous_packet_task_id`** and **`same_task_as_previous`** (solo resume signal). **`selection_meta.ingest_freshness`** compares stored ingest git HEAD to live repo HEAD — if they differ, re-run **`mimir_ingest`**. **`open_questions`** may list near-duplicate intent descriptions.
+**Packets:** **`subsystem_cards`** lists ranked **`SUBSYSTEM:`** handles. **`selection_meta.continuation`** records **`previous_packet_task_id`** and **`same_task_as_previous`**. **`selection_meta.ingest_freshness`** compares stored ingest git HEAD to live repo HEAD — if they differ, re-run **`mimir_ingest`**. **`selection_meta.packet_mode`** may be `full` or `delta`. **`open_questions`** may list near-duplicate intent descriptions.
+
+### Delta packets and git path hints
+
+- First **`mimir_build_packet`** for a given **`task_id`** is always a **full** packet; the server stores a snapshot for diffing.
+- Later calls with **`packet_mode`: `delta`** emit a compact **YAML diff** vs. that snapshot (plus continuation/freshness as usual).
+- With **`include_git_path_diff`: true** (and a successful ingest that recorded git HEAD), the packet can include **paths changed in git** since that HEAD — useful when graph and ledger need file-level awareness without a full re-ingest.
+
+### Offline recall (`mimir_recall_similar`)
+
+Use for “what did we decide before?” style questions without building a full packet. Scoring is **TF–IDF-style** cosine similarity over concatenated intent and episode text — **no network**, no API keys for embeddings.
+
+### CI validation recording
+
+1. Register tests/verifiers with **`mimir_record_validation`** so each has a stable **`id`** in `validation_registry`.
+2. In the **application repo** (not necessarily the Mimir repo), add **`.mimir/ci-mapping.yaml`** mapping CI job names to those ids. See **`.mimir/ci-mapping.example.yaml`** in this repo.
+3. From CI, run:
+
+   ```bash
+   npm run ci-ingest -- <absolute_repo_root>
+   ```
+
+   (Install Mimir or copy the script; set env — see **Environment variables** below.)
+
+4. Or call **`mimir_apply_ci_result`** from automation that can use MCP tools directly.
+
+### Team ledger (share intents + validations)
+
+- **`mimir_team_ledger_export`** / **`mimir_team_ledger_import`** move JSON between databases or teammates.
+- **Startup merge:** set **`MIMIR_TEAM_LEDGER_IMPORT`** to an absolute path of a JSON file; it is merged when the MCP/API **`init`** runs.
+- **Auto-export on write:** set **`MIMIR_TEAM_LEDGER_EXPORT_PATH`**; after **`mimir_record_decision`** or **`mimir_record_validation`**, the file is rewritten.
 
 ### Graph coverage (`mimir_expand_handle`)
 
@@ -80,10 +128,35 @@ Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`.
 Single SQLite file:
 
 - **Default:** `<MIMIR_repo>/mimir.db` (next to `package.json`, **not** `cwd`).
-- **Override:** `MIMIR_DB_PATH` (absolute) in the MCP process env.
+- **Override:** **`MIMIR_DB_PATH`** (absolute) in the MCP process env.
 
 Stderr on start: `[mimir-mcp] database: /path/to/mimir.db`.
+
+### Environment variables (reference)
+
+| Variable | Purpose |
+|----------|---------|
+| `MIMIR_DB_PATH` | Absolute path to SQLite DB (default: `mimir.db` next to Mimir `package.json`). |
+| `MIMIR_ALLOW_UNSAFE_SECRET_RECORDING` | Set to `1` to allow secret-like strings in MCP writes (not recommended). |
+| `MIMIR_TEAM_LEDGER_IMPORT` | Absolute path to JSON file merged at **`init`** (intents + validations). |
+| `MIMIR_TEAM_LEDGER_EXPORT_PATH` | Absolute path; rewritten after decision/validation writes when set. |
+
+**`npm run ci-ingest`** (run from Mimir repo with `ts-node`):
+
+| Variable | Purpose |
+|----------|---------|
+| `MIMIR_DB_PATH` | Target SQLite DB (same as MCP). |
+| `MIMIR_VALIDATION_ID` | Explicit validation id (skips mapping file). |
+| `GITHUB_JOB` | Job name; resolved via `.mimir/ci-mapping.yaml` → `validation_id`. |
+| `CI_VERDICT` | `PASS`, `FAIL`, or `PENDING`. |
+| `GITHUB_SHA`, `GITHUB_RUN_ID`, `CI_RUN_URL` | Optional provenance strings. |
 
 ### Reset / cleanup
 
 Stop MCP, then delete that `mimir.db`, use **`mimir_delete_memory`**, or delete rows from `intent_ledger`, `episode_journal`, `validation_registry`, `subsystem_cards`, `telemetry_traces`, `structural_graph` as needed.
+
+---
+
+## License
+
+[ISC](https://opensource.org/licenses/ISC) — see `package.json`.
