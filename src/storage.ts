@@ -1,13 +1,20 @@
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
+import * as path from "path";
 import { EpisodeEntry, IntentDecision, ValidationEntry, StructuralNode, TraceEntry } from "./schemas";
 
 export class StorageLayer {
   private db!: Database;
+  private dataFilePath = "";
+
+  getDataFilePath(): string {
+    return this.dataFilePath;
+  }
 
   async init(filename: string = "memory.db") {
+    this.dataFilePath = path.resolve(filename);
     this.db = await open({
-      filename,
+      filename: this.dataFilePath,
       driver: sqlite3.Database
     });
 
@@ -222,6 +229,11 @@ export class StorageLayer {
       ...r,
       target_symbols: JSON.parse(r.target_symbols)
     }));
+  }
+
+  async countStructuralNodes(): Promise<number> {
+    const row = await this.db.get(`SELECT COUNT(*) as c FROM structural_graph`);
+    return Number((row as { c: number })?.c ?? 0);
   }
 
   async getStructuralNodes(): Promise<StructuralNode[]> {

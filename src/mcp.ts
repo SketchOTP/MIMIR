@@ -9,6 +9,13 @@ import { MemorySystemAPI } from "./index";
 import { BudgetMode, TaskType } from "./schemas";
 import * as path from "path";
 
+/** Stable DB location: default is <MIMIR repo root>/mimir.db (parent of src/), not process.cwd() (Cursor varies cwd). */
+function resolveMcpDbPath(): string {
+  const fromEnv = process.env.MIMIR_DB_PATH?.trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return path.join(path.dirname(__dirname), "mimir.db");
+}
+
 // Define the core MCP Server
 const server = new Server(
   {
@@ -25,10 +32,9 @@ const server = new Server(
 const memory = new MemorySystemAPI();
 
 async function initMemory() {
-  // Use a persistent DB in the user's home directory or workspace root
-  // For the sake of the MCP server, let's use a local file in the workspace
-  const dbPath = path.join(process.cwd(), "mimir.db");
+  const dbPath = resolveMcpDbPath();
   await memory.init(dbPath);
+  console.error(`[mimir-mcp] database: ${dbPath}`);
 }
 
 // Register tools
@@ -153,8 +159,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     if (name === "mimir_ingest") {
       const { path: repoPath } = args as any;
-      await memory.ingest_repo(repoPath);
-      return { content: [{ type: "text", text: `Successfully ingested repository at ${repoPath} and completed CodeRank pass.` }] };
+      const root = path.resolve(repoPath);
+      await memory.ingest_repo(root);
+      const nodeCount = await memory.storage.countStructuralNodes();
+      const dbFile = memory.storage.getDataFilePath();
+      let text = `Successfully ingested repository at ${root}. structural_graph nodes: ${nodeCount}. database: ${dbFile}`;
+      if (nodeCount === 0) {
+        text +=
+          " WARNING: zero graph nodes — confirm the path is readable and contains .ts/.js/.py sources; if the DB path was wrong before, set MIMIR_DB_PATH or restart MCP after upgrading.";
+      }
+      return { content: [{ type: "text", text }] };
     } 
     
     else if (name === "mimir_build_packet") {

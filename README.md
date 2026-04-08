@@ -59,6 +59,16 @@ Mimir V2 runs natively as a Model Context Protocol (MCP) server, allowing Cursor
 2. Run `npm install`.
 3. The executable is located at `./bin/mimir-mcp.js`.
 
+### Indexing your application repository (separate step)
+
+Installing Mimir (steps above) **does not** scan your application code. That is a **separate** step for each codebase you care about:
+
+1. With the MCP connected, call **`mimir_ingest`** with the **absolute path** to your project root (works for **pre-existing repos** and new projects alike).
+2. Wait for a successful response that includes **`structural_graph nodes: N`** (with **N > 0** for non-trivial trees) and the **`database:`** path.
+3. Only then should you rely on **`FILE:`** / **`SYMBOL:`** handles and graph-heavy context from **`mimir_build_packet`**.
+
+Without ingest, **ledger** features still work (rules, episodes, validations you record), but there is **no structural graph** for that repo until you index it. Re-run **`mimir_ingest`** after major refactors or when graph-backed context seems stale.
+
 ### Adding to Cursor Settings
 
 1. Open Cursor and navigate to **Settings > Cursor Settings > Features > MCP Settings** (or equivalent MCP tool tab).
@@ -85,6 +95,15 @@ Once attached, the Cursor Agent will have access to the following capabilities:
 - **Stored `FILE:` ids** use the **absolute** path on disk. The packet may show relative paths; **`mimir_expand_handle`** also resolves `FILE:relative/path` by suffix match against ingested files.
 - **Re-ingest** after pulling a new Mimir version if you need updated Python indexing: run `mimir_ingest` again on your project root.
 
+### Database file location (MCP)
+
+The MCP server stores state in a **single** SQLite file:
+
+- **Default:** `<directory containing the Mimir clone>/mimir.db` (next to `package.json`, **not** `process.cwd()`). Cursor’s cwd varies by workspace; binding the DB to the Mimir install path keeps **ingest graph rows** and **ledger/episodes** in one place.
+- **Override:** set environment variable **`MIMIR_DB_PATH`** to an absolute path of your choice when launching the MCP process (e.g. in Cursor MCP config `env`).
+
+On startup, the server logs a line to stderr: `[mimir-mcp] database: /path/to/mimir.db` — use that to confirm which file tools are using.
+
 ### Clearing local MCP data (smoke tests, experiments)
 
-Persistent state lives in `mimir.db` in the process **current working directory** (where Cursor launches the MCP server). To remove test rules/episodes/graph data, delete that file when the server is stopped, or use SQLite to delete specific rows from `intent_ledger` / `episode_journal` / `structural_graph`.
+Stop the MCP server, then delete the `mimir.db` file you see in the log above (or remove specific rows from `intent_ledger` / `episode_journal` / `structural_graph`).

@@ -7,11 +7,18 @@ alwaysApply: true
 
 Memory and coding context for this workspace are governed by the **Mimir MCP**. Use it deliberately on every non-trivial task; do not rely on ad-hoc memory when these tools are available.
 
+## Installation vs indexing (critical)
+
+- **Installing Mimir** means: the Mimir repo is on disk, `npm install` has been run, and the MCP server is configured in Cursor (`node` + path to `bin/mimir-mcp.js`). That alone **does not** index any application repository.
+- **Indexing** means: calling **`mimir_ingest`** once with the **absolute path** to the **project root** you are working on (pre-existing repo or new—same requirement).
+- **Without ingest**, the **ledger** still works (`mimir_record_decision`, episodes, `mimir_build_packet` for rules/tests you have recorded), but **`FILE:` / `SYMBOL:`** graph data does not exist for that codebase—**`mimir_expand_handle`** and graph slices in the packet will not reflect the repo until you ingest it.
+- **When to ingest first:** before relying on graph-backed symbols for this project, or after a large refactor / clone / Mimir upgrade that should refresh the graph. Confirm the tool response shows a **non-zero** `structural_graph nodes` count.
+
 ## Tool reference (use the real MCP tools)
 
 | Tool | When |
 |------|------|
-| `mimir_ingest` | Before relying on graph-backed symbols: ingest the **absolute path** to this repo (or the relevant project root). Re-ingest after large refactors if the graph may be stale. |
+| `mimir_ingest` | **Required** for graph-backed context on a codebase: pass the **absolute path** to that project’s root (not automatic when Mimir is “installed”). Re-ingest after large refactors if the graph may be stale. |
 | `mimir_build_packet` | **Start** of every new task, bugfix, or feature (see below). |
 | `mimir_expand_handle` | Whenever the packet lists handles you must apply (`RULE:…`, `TEST:…`, `SYMBOL:…`, `ATTEMPT:…`, etc.)—**do not guess** their meaning. |
 | `mimir_record_episode` | **End** of work or when stopping on a dead end (see below). |
@@ -60,3 +67,4 @@ If the same wrong hypothesis repeats across episodes, consider **`mimir_run_gc`*
 - Keep **`task_id`** stable within one task so episodes stay correlated.
 - Secrets and one-off credentials must **not** be written into Mimir fields; describe them obliquely if needed.
 - Graph **`FILE:`** / **`SYMBOL:`** expansion requires those nodes to exist: run **`mimir_ingest`** on the **absolute** project root after checkout or Mimir upgrades. Use handle forms from the packet (`SYMBOL:relative/path.py::symbol`); `SYMBOL:pkg.module::name` is not a valid graph id unless ingested that way.
+- If ingest reports success but **`mimir_expand_handle`** still fails for `FILE:`/`SYMBOL:`, check the ingest response for **`structural_graph nodes: N`** and **`database: /path/to/mimir.db`**. **`N = 0`** means no graph was indexed (wrong path or unreadable tree). **`MIMIR_DB_PATH`** overrides where state is stored; the MCP logs **`[mimir-mcp] database: ...`** on stderr.
