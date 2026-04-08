@@ -19,6 +19,37 @@ Mimir keeps **context packets** bounded on large codebases (10k+ files) by combi
 
 **Schemas (high level):** `SubsystemCard` (~100-token domain summaries), `TraceEntry` (telemetry matching), `StructuralNode` (centrality/coverage/churn/status), intents, episodes, validations.
 
+## Clone, pull, and install
+
+**Prerequisites:** [Node.js](https://nodejs.org/) **18 or newer** (LTS recommended). This repo sets `"engines": { "node": ">=18.0.0" }` in `package.json`.
+
+**Everything you need** to run Mimir is declared in **`package.json`** and pinned by the committed **`package-lock.json`**. After a **clone** or **`git pull`**, install dependencies from the repo root:
+
+```bash
+npm ci
+```
+
+**`npm ci`** installs the exact tree from `package-lock.json` (recommended for pulls, CI, and reproducible setups). Use **`npm install`** when you are intentionally adding or upgrading packages and will commit an updated lockfile.
+
+**Fresh clone:**
+
+```bash
+git clone https://github.com/SketchOTP/MIMIR.git
+cd MIMIR
+npm ci
+```
+
+**Update an existing clone:**
+
+```bash
+git pull
+npm ci
+```
+
+If `npm ci` fails because `node_modules` is in a bad state, remove it and retry: `rm -rf node_modules` (or delete the folder on Windows), then `npm ci` again.
+
+**`sqlite3` (native):** Prebuilt binaries are used when available. If the install step tries to compile from source and fails, install OS build tools for [node-gyp](https://github.com/nodejs/node-gyp#installation) (e.g. **Windows:** Visual Studio Build Tools with “Desktop development with C++”; **macOS:** Xcode CLI tools; **Linux:** `build-essential`, `python3`).
+
 ## Proof demo
 
 ```bash
@@ -30,7 +61,7 @@ Demonstrates: YAML packet compression; CodeRank pruning; **episodic GC** (duplic
 ### Smoke tests
 
 ```bash
-npm install
+npm ci
 npm run smoke
 ```
 
@@ -47,13 +78,13 @@ Runs end-to-end checks (ingest, packets, expand handles, ledger ops, delta packe
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`. Server version **4.0.0**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.0**.
 
 ### Install vs. ingest
 
 | | |
 |--|--|
-| **Install** | Clone repo, `npm install` — does **not** index your app. |
+| **Install** | Clone repo, run **`npm ci`** in the Mimir directory — does **not** index your app. |
 | **Ingest** | Call **`mimir_ingest`** with **absolute path** to each project root. Expect **`structural_graph nodes: N`** (**N > 0**) and **`database:`** in the response. |
 | **Without ingest** | Ledger tools work (decisions, episodes, validations, packets from those), but **no `FILE:` / `SYMBOL:` graph** for that repo until ingested. Re-ingest after large refactors or stale graph. |
 

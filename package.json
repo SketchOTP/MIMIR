@@ -1,8 +1,19 @@
 {
   "name": "mimir",
   "version": "4.0.0",
-  "description": "",
+  "description": "Structure-first, token-bounded memory MCP for AI coding (SQLite + CodeRank + YAML packets).",
   "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SketchOTP/MIMIR.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SketchOTP/MIMIR/issues"
+  },
+  "homepage": "https://github.com/SketchOTP/MIMIR#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "smoke": "ts-node src/smoke_e2e.ts",
