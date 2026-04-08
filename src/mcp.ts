@@ -206,7 +206,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
          description: dec.description,
          target_scope: { subsystems: dec.subsystems || [] }
       });
-      return { content: [{ type: "text", text: `Successfully recorded decision RULE:${dec.id}.` }] };
+      const handlePrefix =
+        dec.type === "CONSTRAINT" ? "CONSTRAINT" :
+        dec.type === "INVARIANT" ? "INVARIANT" :
+        dec.type === "DECISION" ? "DECISION" :
+        dec.type === "NON_GOAL" ? "NON_GOAL" : "RULE";
+      return { content: [{ type: "text", text: `Successfully recorded decision ${handlePrefix}:${dec.id}.` }] };
     }
 
     else if (name === "mimir_run_gc") {
