@@ -9,7 +9,7 @@ Mimir keeps **context packets** strictly bounded on large codebases (10k+ files)
 | **Repo cartographer** | Ingests the repo; **CodeRank** (in-degree) highlights core vs. long-tail files. |
 | **Telemetry ingestor** | Execution traces boost node **coverage**; runtime-hit (or failing) paths gain weight vs. unused static dependencies. |
 | **Lifecycle manager** | **Blast-radius invalidation**: changed files mark dependents `STALE_UPSTREAM_CHANGE`. **Episodic consolidation**: GC promotes repeated `failed_hypotheses` to `IntentLedger` rules and trims episodes. |
-| **Context packet builder** | Emits dense **YAML** `ContextPacket`; compares **live `git rev-parse`** at ingest root to last ingest HEAD (`ingest_freshness`); flags near-duplicate intents; **hard**-bound rules sort first; **CodeRank pruning** adds at most **5 / 12 / 24** graph symbols for **scout / operate / investigate & forensics**. |
+| **Context packet builder** | Emits dense **YAML** `ContextPacket`; **subsystem_cards** + ranked intents/tests; **continuation** (same `task_id` as last packet); compares **live `git rev-parse`** to ingest HEAD (`ingest_freshness`); near-duplicate intents; **hard**-bound rules first; **CodeRank** caps graph symbols (**5 / 12 / 24** by mode). |
 | **Storage** | SQLite: graph nodes (`centrality`, `coverage`, `churn`, `status`), intent ledger, episodes, `validation_registry`, area lessons. |
 
 **Schemas (high level):** `SubsystemCard` (~100-token domain summaries), `TraceEntry` (telemetry matching), `StructuralNode` (centrality/coverage/churn/status), intents, episodes, validations.
@@ -53,19 +53,21 @@ Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`.
 |------|---------|
 | `mimir_ingest` | Build/update CodeRank graph for a repo path. |
 | `mimir_build_packet` | YAML context packet (task, mode, seeds). |
-| `mimir_expand_handle` | Expand `RULE:` / `CONSTRAINT:` / … / `TEST:` / `VERIFIER:` / `ATTEMPT:` / `FILE:` / `SYMBOL:` within token budget. |
+| `mimir_expand_handle` | Expand `RULE:` / `CONSTRAINT:` / … / `TEST:` / `VERIFIER:` / `SUBSYSTEM:` / `ATTEMPT:` / `FILE:` / `SYMBOL:` within token budget. |
 | `mimir_record_episode` | Task outcome, verdicts, failed hypotheses. |
 | `mimir_record_decision` | Intent ledger (RULE, CONSTRAINT, INVARIANT, DECISION, NON_GOAL). |
 | `mimir_record_validation` | `validation_registry` — **`TEST:`** / **`VERIFIER:`** in packets; optional **provenance** (`commit_sha`, `ci_run_url`, `ci_run_id`). |
-| `mimir_query_memory` | JSON snapshot of intents / validations / episodes (capped) — solo ledger inspection without a full packet. |
-| `mimir_delete_memory` | Delete one intent, validation, or episode by id (cleanup / smoke tests). |
+| `mimir_record_subsystem_card` | Domain summaries — **`SUBSYSTEM:…`** handles in **`subsystem_cards`** (id must start with **`SUBSYSTEM:`**). |
+| `mimir_record_trace` | Execution trace → boosts **coverage** on matching graph symbols (`telemetry_traces`). |
+| `mimir_query_memory` | JSON snapshot: **`all`** / intents / validations / episodes / **subsystems** / **traces** (capped). |
+| `mimir_delete_memory` | Delete one row: intent, validation, episode, **subsystem**, or **trace** by id. |
 | `mimir_run_gc` | Episodic consolidation (AUTO_RULE synthesis, episode trim). |
 
 **Writes:** MCP blocks obvious **secrets** in recorded text (API keys, PATs, PEM headers, AWS key ids). To override (not recommended): **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`**.
 
 **Ledger extras:** **`mimir_record_decision`** supports **`binding`**: `hard` (surfaced first in packets) vs `soft`, and optional **`reference_url`** (ADR/issue). **`mimir_record_episode`** supports optional **`commit_sha`**, **`ci_run_url`**, **`ci_run_id`**, **`repo_head_at_close`**.
 
-**Packets:** **`selection_meta.ingest_freshness`** compares stored ingest git HEAD to live repo HEAD — if they differ, re-run **`mimir_ingest`** so `FILE:`/`SYMBOL:` match current commits. **`open_questions`** may list near-duplicate intent descriptions.
+**Packets:** **`subsystem_cards`** lists ranked **`SUBSYSTEM:`** handles. **`selection_meta.continuation`** records **`previous_packet_task_id`** and **`same_task_as_previous`** (solo resume signal). **`selection_meta.ingest_freshness`** compares stored ingest git HEAD to live repo HEAD — if they differ, re-run **`mimir_ingest`**. **`open_questions`** may list near-duplicate intent descriptions.
 
 ### Graph coverage (`mimir_expand_handle`)
 
@@ -84,4 +86,4 @@ Stderr on start: `[mimir-mcp] database: /path/to/mimir.db`.
 
 ### Reset / cleanup
 
-Stop MCP, then delete that `mimir.db`, use **`mimir_delete_memory`**, or delete rows from `intent_ledger`, `episode_journal`, `validation_registry`, `structural_graph` as needed.
+Stop MCP, then delete that `mimir.db`, use **`mimir_delete_memory`**, or delete rows from `intent_ledger`, `episode_journal`, `validation_registry`, `subsystem_cards`, `telemetry_traces`, `structural_graph` as needed.

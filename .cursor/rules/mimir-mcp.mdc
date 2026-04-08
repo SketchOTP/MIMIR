@@ -21,12 +21,14 @@ Memory and coding context for this workspace are governed by the **Mimir MCP**. 
 |------|------|
 | `mimir_ingest` | **Required** for graph-backed context on a codebase: pass the **absolute path** to that project’s root (not automatic when Mimir is “installed”). Re-ingest after large refactors if the graph may be stale. |
 | `mimir_build_packet` | **Start** of every new task, bugfix, or feature (see below). |
-| `mimir_expand_handle` | Whenever the packet lists handles you must apply (`RULE:…`, `TEST:…`, `SYMBOL:…`, `ATTEMPT:…`, etc.)—**do not guess** their meaning. |
+| `mimir_expand_handle` | Whenever the packet lists handles you must apply (`RULE:…`, `TEST:…`, `SUBSYSTEM:…`, `SYMBOL:…`, `ATTEMPT:…`, etc.)—**do not guess** their meaning. |
 | `mimir_record_episode` | **End** of work or when stopping on a dead end (see below). |
 | `mimir_record_decision` | When you establish or change a durable rule, invariant, or non-goal for this codebase. |
 | `mimir_record_validation` | When you register or update a **test** or **verifier** so `TEST:` / `VERIFIER:` handles work without manual SQLite. |
-| `mimir_query_memory` | To inspect intents, validations, or episodes (JSON, capped) without building a full packet. |
-| `mimir_delete_memory` | To remove one ledger row by id (cleanup / experiments). |
+| `mimir_record_subsystem_card` | When you want a durable **domain card** (`SUBSYSTEM:…`) in packets for relevance. |
+| `mimir_record_trace` | After a test run or execution path you want tied to **graph coverage** (PASS/FAIL). |
+| `mimir_query_memory` | To inspect ledger JSON (`all`, intents, validations, episodes, **subsystems**, **traces**). |
+| `mimir_delete_memory` | To remove one row (intent, validation, episode, **subsystem**, **trace**). |
 | `mimir_run_gc` | After repeated failed hypotheses are recorded; consolidates into rules and trims episodic noise (when appropriate). |
 
 ## 1. Start phase (mandatory for code / architecture work)
@@ -41,7 +43,7 @@ Before writing code or giving deep architectural answers:
    - **`mode`**: start with **`scout`**; move to **`operate`**, **`investigate`**, or **`forensics`** only if the packet or handles require deeper token budget.
    - **`symbols`**: best-effort seeds (including `SYMBOL:path::Name` forms after ingest).
    - **`files`**: relevant absolute or project-relative paths.
-3. Read the full **YAML Context Packet** output. Treat **`constraints`**, **`invariants`**, **`lesson_hints`**, **`selection_meta`** (including **`ingest_freshness`**), and **`open_questions`** (duplicate-intent hints) as first-class inputs.
+3. Read the full **YAML Context Packet** output. Treat **`constraints`**, **`invariants`**, **`subsystem_cards`**, **`lesson_hints`**, **`selection_meta`** (**`ingest_freshness`**, **`continuation`**), and **`open_questions`** (duplicate-intent hints) as first-class inputs.
 
 Do not skip this phase for substantive work when Mimir is available.
 

@@ -31,6 +31,12 @@ export interface IngestFreshness {
   recommendation: string | null;
 }
 
+/** Solo continuity: whether this packet is a follow-up in the same task_id session. */
+export interface PacketContinuation {
+  previous_packet_task_id: string | null;
+  same_task_as_previous: boolean;
+}
+
 export interface ContextSelectionMeta {
   ingest: {
     root: string;
@@ -39,11 +45,14 @@ export interface ContextSelectionMeta {
   } | null;
   /** Compares stored ingest git_head to live `git rev-parse` at ingest root (solo dev stale-graph signal). */
   ingest_freshness: IngestFreshness | null;
+  /** Updated after each successful packet build (for resume / multi-call awareness). */
+  continuation: PacketContinuation | null;
   omitted: {
     intents: number;
     validations: number;
     episodes: number;
     graph_symbols: number;
+    subsystems: number;
   };
   ranking: "relevance_v1";
 }
@@ -68,6 +77,8 @@ export interface ContextPacket {
   evidence: string[];
   open_questions: string[];
   lesson_hints: string[];
+  /** Ranked subsystem card handles (see mimir_record_subsystem_card). */
+  subsystem_cards: string[];
   selection_meta: ContextSelectionMeta;
   token_budget: TokenBudget;
   provenance_summary: Record<ProvenanceTier, number>;

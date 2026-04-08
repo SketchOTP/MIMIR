@@ -68,6 +68,16 @@ export class ExpansionResolver {
       return null;
     }
 
+    if (h.startsWith("SUBSYSTEM:")) {
+      const cards = await this.storage.getSubsystemCards();
+      const card = cards.find((c) => c.id === h || `SUBSYSTEM:${c.id}` === h);
+      if (card) {
+        const text = JSON.stringify(card, null, 2);
+        if (this.governor.addCost(budget, text)) return text;
+      }
+      return null;
+    }
+
     return null;
   }
 }

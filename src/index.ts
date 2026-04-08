@@ -5,7 +5,16 @@ import { TokenGovernor } from "./token_governor";
 import { ExpansionResolver } from "./resolver";
 import { LifecycleManager } from "./lifecycle";
 import { TelemetryIngestor } from "./telemetry";
-import { TaskType, BudgetMode, EpisodeEntry, ValidationEntry, IntentDecision, TokenBudget } from "./schemas";
+import {
+  TaskType,
+  BudgetMode,
+  EpisodeEntry,
+  ValidationEntry,
+  IntentDecision,
+  TokenBudget,
+  SubsystemCard,
+  TraceEntry,
+} from "./schemas";
 import * as path from "path";
 
 export class MemorySystemAPI {
@@ -61,7 +70,7 @@ export class MemorySystemAPI {
 
   /** JSON snapshot of ledger rows for solo inspection (capped). */
   async query_memory(
-    filter: "all" | "intents" | "validations" | "episodes",
+    filter: "all" | "intents" | "validations" | "episodes" | "subsystems" | "traces",
     limit: number
   ): Promise<string> {
     const lim = Math.min(Math.max(1, limit), 200);
@@ -82,13 +91,37 @@ export class MemorySystemAPI {
       out.episodes = sorted.slice(0, lim);
       out.episodes_omitted = Math.max(0, sorted.length - lim);
     }
+    if (filter === "all" || filter === "subsystems") {
+      const rows = await this.storage.getSubsystemCards();
+      out.subsystems = rows.slice(0, lim);
+      out.subsystems_omitted = Math.max(0, rows.length - lim);
+    }
+    if (filter === "all" || filter === "traces") {
+      const rows = await this.storage.getTraces();
+      const sorted = [...rows].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+      out.traces = sorted.slice(0, lim);
+      out.traces_omitted = Math.max(0, sorted.length - lim);
+    }
     return JSON.stringify(out, null, 2);
   }
 
-  async delete_memory(kind: "intent" | "validation" | "episode", id: string): Promise<void> {
+  async delete_memory(
+    kind: "intent" | "validation" | "episode" | "subsystem" | "trace",
+    id: string
+  ): Promise<void> {
     if (kind === "intent") await this.storage.deleteIntent(id);
     else if (kind === "validation") await this.storage.deleteValidation(id);
-    else await this.storage.deleteEpisode(id);
+    else if (kind === "episode") await this.storage.deleteEpisode(id);
+    else if (kind === "subsystem") await this.storage.deleteSubsystemCard(id);
+    else await this.storage.deleteTrace(id);
+  }
+
+  async record_subsystem_card(card: SubsystemCard): Promise<void> {
+    await this.storage.saveSubsystemCard(card);
+  }
+
+  async record_trace(trace: TraceEntry): Promise<void> {
+    await this.telemetry.ingestExecutionTrace(trace);
   }
 }
 

@@ -106,6 +106,20 @@ async function main() {
   const repoRoot = path.join(__dirname, "..");
   await memory.ingest_repo(repoRoot);
 
+  await memory.record_subsystem_card({
+    id: "SUBSYSTEM:SmokeTest",
+    description: "Smoke area for MemorySystemAPI and ingest",
+    public_api_symbols: ["MemorySystemAPI"],
+    known_invariants: ["init before use"],
+  });
+
+  await memory.record_trace({
+    id: "SMOKE_TRACE_1",
+    timestamp: new Date().toISOString(),
+    target_symbols: ["MemorySystemAPI"],
+    verdict: "PASS",
+  });
+
   const nodeCount = await memory.storage.countStructuralNodes();
   ok("ingest produced graph nodes", nodeCount > 0, `count=${nodeCount}`);
 
@@ -138,6 +152,28 @@ async function main() {
   const constraints = packet.constraints as string[] | undefined;
   ok("hard constraint appears in packet", Array.isArray(constraints) && constraints.some((c) => c.includes("SMOKE_HARD")));
 
+  const cont = sel?.continuation as Record<string, unknown> | undefined;
+  ok("packet has continuation", !!cont);
+  ok("first packet not same_task_as_previous", cont?.same_task_as_previous === false);
+
+  const subList = packet.subsystem_cards as string[] | undefined;
+  ok(
+    "subsystem_cards ranked",
+    Array.isArray(subList) && subList.some((s) => s.includes("SmokeTest"))
+  );
+
+  const packetYaml2 = await memory.build_context_packet(
+    "T-smoke",
+    "smoke test objective mentions duplicate and constraint",
+    "bug_fix",
+    "scout",
+    { symbols: ["MemorySystemAPI"], files: [path.join(repoRoot, "src", "index.ts")] }
+  );
+  const packet2 = yaml.load(packetYaml2) as Record<string, unknown>;
+  const sel2 = packet2.selection_meta as Record<string, unknown> | undefined;
+  const cont2 = sel2?.continuation as Record<string, unknown> | undefined;
+  ok("second packet same_task_as_previous", cont2?.same_task_as_previous === true);
+
   const budget = memory.tokenGovernor.createBudget("scout");
   const nodes = await memory.storage.getStructuralNodes();
   const fileNode = nodes.find((n) => n.type === "FILE" && n.path.includes("index.ts"));
@@ -159,8 +195,15 @@ async function main() {
   const exTest = await memory.expand_handle("TEST:SMOKE_TEST_1", budget);
   ok("expand TEST + provenance", !!exTest && exTest.includes("commit_sha"));
 
+  const exSub = await memory.expand_handle("SUBSYSTEM:SmokeTest", budget);
+  ok("expand SUBSYSTEM", !!exSub && exSub.includes("SmokeTest"));
+
   const qjson = await memory.query_memory("all", 50);
   ok("query_memory returns JSON", qjson.includes("SMOKE_TEST_1") && qjson.includes("intents"));
+  const qSub = await memory.query_memory("subsystems", 20);
+  ok("query_memory subsystems", qSub.includes("SUBSYSTEM:SmokeTest"));
+  const qTr = await memory.query_memory("traces", 20);
+  ok("query_memory traces", qTr.includes("SMOKE_TRACE_1"));
 
   await memory.delete_memory("validation", "SMOKE_VER_1");
   const valsAfter = await memory.storage.getValidations();
@@ -201,6 +244,12 @@ async function main() {
 
   await memory.delete_memory("intent", "SMOKE_DUP_A");
   ok("delete_memory intent", !(await memory.storage.getIntents()).some((i) => i.id === "SMOKE_DUP_A"));
+
+  await memory.delete_memory("trace", "SMOKE_TRACE_1");
+  ok("delete_memory trace", !(await memory.storage.getTraces()).some((t) => t.id === "SMOKE_TRACE_1"));
+
+  await memory.delete_memory("subsystem", "SUBSYSTEM:SmokeTest");
+  ok("delete_memory subsystem", !(await memory.storage.getSubsystemCards()).some((c) => c.id === "SUBSYSTEM:SmokeTest"));
 
   console.log(failures === 0 ? "\n=== ALL SMOKE CHECKS PASSED ===" : "\n=== SMOKE FAILED ===");
   } finally {

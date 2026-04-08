@@ -4,6 +4,7 @@ import { TokenGovernor } from "./token_governor";
 import {
   scoreIntent,
   scoreValidation,
+  scoreSubsystemCard,
   scoreEpisode,
   nodeRelevantToScope,
   buildSeedFileIds,
@@ -98,6 +99,8 @@ export class ContextPacketBuilder {
 
     const lessonHints = await this.storage.getLessonsForPaths(files);
 
+    const prevTaskId = (await this.storage.getMetadata("last_context_packet_task_id")) ?? "";
+
     const packet: ContextPacket = {
       task_id: taskId,
       task_type: taskType,
@@ -118,6 +121,7 @@ export class ContextPacketBuilder {
       evidence: [],
       open_questions: [],
       lesson_hints: lessonHints,
+      subsystem_cards: [],
       selection_meta: {
         ingest:
           ingestRoot != null
@@ -128,11 +132,16 @@ export class ContextPacketBuilder {
               }
             : null,
         ingest_freshness: ingestFreshness,
+        continuation: {
+          previous_packet_task_id: prevTaskId.length > 0 ? prevTaskId : null,
+          same_task_as_previous: prevTaskId.length > 0 && prevTaskId === taskId,
+        },
         omitted: {
           intents: 0,
           validations: 0,
           episodes: 0,
           graph_symbols: 0,
+          subsystems: 0,
         },
         ranking: "relevance_v1",
       },
@@ -197,6 +206,25 @@ export class ContextPacketBuilder {
     }
     packet.selection_meta.omitted.validations = Math.max(0, rankedVals.length - valAdded);
 
+    const subCards = await this.storage.getSubsystemCards();
+    const rankedSub = subCards
+      .map((c) => ({ c, s: scoreSubsystemCard(c, objective, symbols, files) }))
+      .sort((a, b) => b.s - a.s);
+    const maxSub = mode === "scout" ? 3 : mode === "operate" ? 6 : 12;
+    let subAdded = 0;
+    for (const { c } of rankedSub) {
+      if (subAdded >= maxSub) break;
+      const handle = c.id.startsWith("SUBSYSTEM:") ? c.id : `SUBSYSTEM:${c.id}`;
+      if (this.governor.addCost(budget, handle)) {
+        packet.subsystem_cards.push(handle);
+        subAdded++;
+        packet.provenance_summary.STATED++;
+      } else {
+        break;
+      }
+    }
+    packet.selection_meta.omitted.subsystems = Math.max(0, rankedSub.length - subAdded);
+
     const episodes = await this.storage.getEpisodes();
     const rankedFails = episodes
       .map((e) => ({ e, s: scoreEpisode(e, objective, taskId, files) }))
@@ -242,6 +270,7 @@ export class ContextPacketBuilder {
     packet.selection_meta.omitted.graph_symbols = Math.max(0, graphCandidates.length - graphAdded);
 
     packet.token_budget = budget;
+    await this.storage.setMetadata("last_context_packet_task_id", taskId);
     return yaml.dump(packet, { skipInvalid: true, noRefs: true });
   }
 }

@@ -1,4 +1,11 @@
-import { EpisodeEntry, IntentDecision, ValidationEntry, StructuralNode, TaskType } from "./schemas";
+import {
+  EpisodeEntry,
+  IntentDecision,
+  ValidationEntry,
+  StructuralNode,
+  SubsystemCard,
+  TaskType,
+} from "./schemas";
 import * as path from "path";
 
 const WORD_RE = /[a-zA-Z_][a-zA-Z0-9_]*/g;
@@ -94,6 +101,32 @@ export function scoreValidation(
     if (files.some((f) => pathsRoughMatch(f, tf))) score += 14;
   }
   if (val.last_run_verdict === "FAIL") score += 5;
+  return score;
+}
+
+export function scoreSubsystemCard(
+  card: SubsystemCard,
+  objective: string,
+  symbols: string[],
+  files: string[]
+): number {
+  let score = wordOverlap(card.description, objective) * 10;
+  const objTok = tokenize(objective);
+  for (const inv of card.known_invariants) {
+    if (wordOverlap(inv, objective) > 0.1) score += 8;
+  }
+  for (const sym of card.public_api_symbols) {
+    for (const seed of symbols) {
+      const raw = seed.replace(/^SYMBOL:/, "");
+      if (sym === seed || shortSymbolMatch(raw, sym) || sym.includes(raw) || raw.includes(sym)) score += 14;
+    }
+    if (objTok.has(sym.toLowerCase())) score += 6;
+  }
+  const idShort = card.id.replace(/^SUBSYSTEM:/i, "");
+  if (objTok.has(idShort.toLowerCase()) || objective.toLowerCase().includes(idShort.toLowerCase())) score += 10;
+  for (const f of files) {
+    if (card.description.toLowerCase().includes(path.basename(f).toLowerCase())) score += 4;
+  }
   return score;
 }
 

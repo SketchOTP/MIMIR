@@ -1,7 +1,14 @@
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
 import * as path from "path";
-import { EpisodeEntry, IntentDecision, ValidationEntry, StructuralNode, TraceEntry } from "./schemas";
+import {
+  EpisodeEntry,
+  IntentDecision,
+  ValidationEntry,
+  StructuralNode,
+  TraceEntry,
+  SubsystemCard,
+} from "./schemas";
 
 export class StorageLayer {
   private db!: Database;
@@ -329,6 +336,34 @@ export class StorageLayer {
       ...r,
       target_symbols: JSON.parse(r.target_symbols)
     }));
+  }
+
+  async deleteTrace(id: string): Promise<void> {
+    await this.db.run(`DELETE FROM telemetry_traces WHERE id = ?`, id);
+  }
+
+  async saveSubsystemCard(card: SubsystemCard): Promise<void> {
+    await this.db.run(
+      `INSERT OR REPLACE INTO subsystem_cards (id, description, public_api_symbols, known_invariants) VALUES (?, ?, ?, ?)`,
+      card.id,
+      card.description,
+      JSON.stringify(card.public_api_symbols),
+      JSON.stringify(card.known_invariants)
+    );
+  }
+
+  async getSubsystemCards(): Promise<SubsystemCard[]> {
+    const rows = await this.db.all(`SELECT * FROM subsystem_cards`);
+    return rows.map((r) => ({
+      id: r.id as string,
+      description: r.description as string,
+      public_api_symbols: JSON.parse(r.public_api_symbols as string),
+      known_invariants: JSON.parse(r.known_invariants as string),
+    }));
+  }
+
+  async deleteSubsystemCard(id: string): Promise<void> {
+    await this.db.run(`DELETE FROM subsystem_cards WHERE id = ?`, id);
   }
 
   async countStructuralNodes(): Promise<number> {

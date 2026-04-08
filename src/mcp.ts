@@ -6,7 +6,15 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { MemorySystemAPI } from "./index";
-import { BudgetMode, TaskType, ValidationEntry, RecordProvenance, IntentDecision } from "./schemas";
+import {
+  BudgetMode,
+  TaskType,
+  ValidationEntry,
+  RecordProvenance,
+  IntentDecision,
+  SubsystemCard,
+  TraceEntry,
+} from "./schemas";
 import { scanRecordedPayload } from "./secrets";
 import * as path from "path";
 
@@ -50,7 +58,7 @@ function resolveMcpDbPath(): string {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "3.0.0",
+    version: "3.1.0",
   },
   {
     capabilities: {
@@ -86,7 +94,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "mimir_build_packet",
         description:
-          "Builds a YAML context packet (relevance_v1): ranked intents/tests/episodes, graph-derived symbols, lesson_hints, selection_meta (ingest info + omitted counts). Run FIRST when starting a task. Prefer scoped symbols like SYMBOL:relative/path.ts::ExportedName after ingest.",
+          "Builds a YAML context packet (relevance_v1): ranked intents/tests/subsystem_cards/episodes, graph-derived symbols, lesson_hints, selection_meta (ingest + continuation + omitted counts). Run FIRST when starting a task. Prefer scoped symbols like SYMBOL:relative/path.ts::ExportedName after ingest.",
         inputSchema: {
           type: "object",
           properties: {
@@ -120,7 +128,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "mimir_expand_handle",
         description:
-          "Expands a handle within the mode token budget. Supports RULE/CONSTRAINT/INVARIANT/DECISION/NON_GOAL, TEST/VERIFIER, ATTEMPT, FILE/SYMBOL (optional ' [STATUS]' suffix stripped). Returns JSON for the entity.",
+          "Expands a handle within the mode token budget. Supports RULE/CONSTRAINT/INVARIANT/DECISION/NON_GOAL, TEST/VERIFIER, SUBSYSTEM, ATTEMPT, FILE/SYMBOL (optional ' [STATUS]' suffix stripped). Returns JSON for the entity.",
         inputSchema: {
           type: "object",
           properties: {
@@ -206,15 +214,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "mimir_record_subsystem_card",
+        description:
+          "Registers a domain subsystem summary (~100-token style): public API symbols and invariants. Appears as SUBSYSTEM:… handles in packets; expand with mimir_expand_handle.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "Stable id with prefix SUBSYSTEM:Name (e.g. SUBSYSTEM:Auth).",
+            },
+            description: { type: "string", description: "Short narrative of the subsystem." },
+            public_api_symbols: {
+              type: "array",
+              items: { type: "string" },
+              description: "Exported symbols or SYMBOL: paths for relevance.",
+            },
+            known_invariants: {
+              type: "array",
+              items: { type: "string" },
+              description: "Rules that should hold in this area.",
+            },
+          },
+          required: ["id", "description"],
+        },
+      },
+      {
+        name: "mimir_record_trace",
+        description:
+          "Records an execution trace: boosts coverage on matching graph symbols (telemetry). Verdict PASS or FAIL.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Unique trace id." },
+            target_symbols: {
+              type: "array",
+              items: { type: "string" },
+              description: "Symbol ids or substrings matched against the structural graph.",
+            },
+            verdict: { type: "string", enum: ["PASS", "FAIL"] },
+            timestamp: { type: "string", description: "ISO time; defaults to now." },
+          },
+          required: ["id", "target_symbols", "verdict"],
+        },
+      },
+      {
         name: "mimir_query_memory",
         description:
-          "Returns a JSON snapshot of intents, validations, and/or episodes (capped) for solo inspection without building a full packet.",
+          "Returns a JSON snapshot of ledger rows (capped) for solo inspection without building a full packet.",
         inputSchema: {
           type: "object",
           properties: {
             filter: {
               type: "string",
-              enum: ["all", "intents", "validations", "episodes"],
+              enum: ["all", "intents", "validations", "episodes", "subsystems", "traces"],
               description: "Which tables to include.",
             },
             limit: { type: "number", description: "Max rows per table (1–200, default 40)." },
@@ -224,11 +277,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "mimir_delete_memory",
-        description: "Deletes one intent, validation, or episode row by id (use for smoke-test cleanup).",
+        description: "Deletes one ledger row by kind and id (cleanup / smoke tests).",
         inputSchema: {
           type: "object",
           properties: {
-            kind: { type: "string", enum: ["intent", "validation", "episode"] },
+            kind: {
+              type: "string",
+              enum: ["intent", "validation", "episode", "subsystem", "trace"],
+            },
             id: {
               type: "string",
               description: "Intent id, validation id, or episode task_id depending on kind.",
@@ -391,11 +447,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    else if (name === "mimir_record_subsystem_card") {
+      const s = args as Record<string, unknown>;
+      guardSecrets("mimir_record_subsystem_card", s);
+      const id = String(s.id ?? "");
+      if (!id.startsWith("SUBSYSTEM:")) {
+        throw new Error("mimir_record_subsystem_card id must start with SUBSYSTEM: (e.g. SUBSYSTEM:Auth)");
+      }
+      const card: SubsystemCard = {
+        id,
+        description: String(s.description ?? ""),
+        public_api_symbols: strArr(s.public_api_symbols),
+        known_invariants: strArr(s.known_invariants),
+      };
+      await memory.record_subsystem_card(card);
+      return { content: [{ type: "text", text: `Successfully recorded subsystem card ${card.id}.` }] };
+    }
+
+    else if (name === "mimir_record_trace") {
+      const t = args as Record<string, unknown>;
+      guardSecrets("mimir_record_trace", t);
+      const verdict = t.verdict === "PASS" || t.verdict === "FAIL" ? t.verdict : "FAIL";
+      const trace: TraceEntry = {
+        id: String(t.id),
+        timestamp:
+          typeof t.timestamp === "string" && t.timestamp.length > 0
+            ? t.timestamp
+            : new Date().toISOString(),
+        target_symbols: strArr(t.target_symbols),
+        verdict,
+      };
+      await memory.record_trace(trace);
+      return { content: [{ type: "text", text: `Successfully recorded trace ${trace.id} (${trace.verdict}).` }] };
+    }
+
     else if (name === "mimir_query_memory") {
       const q = args as Record<string, unknown>;
       const f = q.filter;
-      const filter: "all" | "intents" | "validations" | "episodes" =
-        f === "intents" || f === "validations" || f === "episodes" || f === "all" ? f : "all";
+      const filter: "all" | "intents" | "validations" | "episodes" | "subsystems" | "traces" =
+        f === "intents" ||
+        f === "validations" ||
+        f === "episodes" ||
+        f === "subsystems" ||
+        f === "traces" ||
+        f === "all"
+          ? f
+          : "all";
       let limit = typeof q.limit === "number" && !Number.isNaN(q.limit) ? q.limit : 40;
       if (typeof q.limit === "string" && q.limit.trim()) {
         const n = Number(q.limit);
@@ -409,8 +506,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     else if (name === "mimir_delete_memory") {
       const d = args as Record<string, unknown>;
       const k = d.kind;
-      if (k !== "intent" && k !== "validation" && k !== "episode") {
-        throw new Error("mimir_delete_memory requires kind: intent | validation | episode");
+      if (
+        k !== "intent" &&
+        k !== "validation" &&
+        k !== "episode" &&
+        k !== "subsystem" &&
+        k !== "trace"
+      ) {
+        throw new Error(
+          "mimir_delete_memory requires kind: intent | validation | episode | subsystem | trace"
+        );
       }
       const kind = k;
       const id = String(d.id ?? "");
