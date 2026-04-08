@@ -7,6 +7,7 @@ node_modules/
 Thumbs.db
 .cursor/hooks/state/
 .mimir/config.yaml
+mimir.db
 _gh_push.json
 _b1.json
 _b2.json

@@ -128,7 +128,9 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.5**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.6**.
+
+One-shot **Obsidian backfill** (SQLite → `10_KGRAPH/KG/<slug>/`): copy `.mimir/config.example.yaml` to `.mimir/config.yaml`, set `vault_path`, then `npm run obsidian-backfill` (or MCP tool **`mimir_obsidian_backfill`**).
 
 ### Install vs. ingest
 

@@ -30,7 +30,7 @@ export interface ObsidianMirrorSettings {
   projectSlug: string;
 }
 
-let fileCache: MimirConfigFile | null | undefined;
+let fileCache: MimirConfigFile | undefined;
 let resolvedCache: ObsidianMirrorSettings | null = null;
 
 function configFilePath(): string {

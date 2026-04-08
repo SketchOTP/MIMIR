@@ -73,6 +73,7 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`mimir_apply_ci_result`** | Set validation by **`validation_id`** + **`verdict`** + optional CI provenance. |
 | **`mimir_team_ledger_export`** | JSON export of intents + validations. |
 | **`mimir_team_ledger_import`** | Merge export JSON (**INSERT OR REPLACE**). |
+| **`mimir_obsidian_backfill`** | Replay SQLite intents/validations/subsystems/traces/episodes into Obsidian **`10_KGRAPH/KG/<slug>/`** (needs vault config). |
 | **`mimir_run_gc`** | Consolidate episodes → rules; trim noise when appropriate. |
 
 ---
@@ -176,7 +177,7 @@ Shell syntax differs by OS; for copy-paste env examples run **`npm run install:h
 - **Secrets**: do not paste keys/tokens into Mimir fields; server blocks common patterns unless **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`**.
 - **`N = 0` nodes** after ingest: fix **absolute path**, ensure sources exist, re-ingest.
 - **Subsystem id**: use **`SUBSYSTEM:Name`** form for **`mimir_record_subsystem_card`**.
-- **Obsidian WIKI:** use **`.mimir/config.yaml`** or env; default **`10_KGRAPH/KG/<slug>/`**; **`mimir_run_gc`** / bulk **`team_ledger_import`** do not sync in v4.0.5.
+- **Obsidian WIKI:** use **`.mimir/config.yaml`** or env; default **`10_KGRAPH/KG/<slug>/`**; **`mimir_obsidian_backfill`** replays SQLite → vault; **`mimir_run_gc`** / bulk **`team_ledger_import`** do not live-sync (use backfill after import).
 
 ---
 

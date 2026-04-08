@@ -147,6 +147,13 @@ async function prepareMirror(vault: string): Promise<{ baseRel: string; slug: st
   return { baseRel, slug };
 }
 
+/** Project stub under `01_PROJECTS/`, mirror root + `MOC.md` under `mirrorRel` (idempotent). */
+export async function ensureObsidianMirrorScaffold(): Promise<void> {
+  const vault = vaultPath();
+  if (!vault) return;
+  await prepareMirror(vault);
+}
+
 export async function syncEpisodeToObsidian(entry: EpisodeEntry): Promise<void> {
   const vault = vaultPath();
   if (!vault) return;

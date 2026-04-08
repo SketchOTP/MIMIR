@@ -1,6 +1,6 @@
 {
   "name": "mimir",
-  "version": "4.0.5",
+  "version": "4.0.6",
   "description": "Structure-first, token-bounded memory MCP for AI coding (SQLite + CodeRank + YAML packets).",
   "main": "index.js",
   "repository": {
@@ -20,7 +20,8 @@
     "ci-ingest": "ts-node src/ci_ingest_main.ts",
     "install:hints": "node scripts/install-hints.cjs",
     "clean": "node scripts/clean-node-modules.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "obsidian-backfill": "ts-node src/obsidian_backfill_main.ts"
   },
   "keywords": [],
   "author": "",

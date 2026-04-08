@@ -22,6 +22,7 @@ import { applyCiResult } from "./ci_apply";
 import type { BuildPacketOptions } from "./context_builder";
 import { osDisplayName } from "./platform";
 import { getObsidianMirrorSettings } from "./mimir_config";
+import { backfillObsidianWiki, refreshObsidianConfigCache } from "./obsidian_backfill";
 
 function guardSecrets(label: string, payload: unknown): void {
   const r = scanRecordedPayload(label, payload);
@@ -56,7 +57,7 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "4.0.5",
+    version: "4.0.6",
   },
   {
     capabilities: {
@@ -68,6 +69,7 @@ const server = new Server(
 const memory = new MemorySystemAPI();
 
 async function initMemory() {
+  refreshObsidianConfigCache();
   const dbPath = resolveMcpDbPath();
   await memory.init(dbPath);
   console.error(`[mimir-mcp] platform: ${osDisplayName()}`);
@@ -355,6 +357,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "mimir_obsidian_backfill",
+        description:
+          "Replays all intents, validations, subsystems, traces, and episodes from SQLite into the Obsidian WIKI mirror (10_KGRAPH/KG/<slug>/, 01_PROJECTS stub). Requires obsidian config or MIMIR_OBSIDIAN_VAULT_PATH. Idempotent overwrites.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
         name: "mimir_run_gc",
         description:
           "Episodic consolidation: repeated failed hypotheses become AUTO_RULE_* intents, episodes purged, and a line appended to global lesson hints.",
@@ -638,6 +649,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       guardSecrets("mimir_team_ledger_import", { ledger_json });
       await memory.team_ledger_import(ledger_json);
       return { content: [{ type: "text", text: "Team ledger merged into local database." }] };
+    }
+
+    else if (name === "mimir_obsidian_backfill") {
+      refreshObsidianConfigCache();
+      const counts = await backfillObsidianWiki(memory.storage);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Obsidian WIKI backfill complete.\n${JSON.stringify(counts, null, 2)}`,
+          },
+        ],
+      };
     }
 
     else if (name === "mimir_run_gc") {
