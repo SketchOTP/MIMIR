@@ -1,4 +1,4 @@
-import type { ExecSyncOptions } from "child_process";
+import { execSync, type ExecSyncOptions } from "child_process";
 
 /** Current `process.platform` (e.g. `win32`, `linux`, `darwin`). */
 export const platform = process.platform as NodeJS.Platform;
@@ -35,4 +35,14 @@ export function gitExecSyncOptions(cwd: string): ExecSyncOptions {
     };
   }
   return base;
+}
+
+/**
+ * Run a git command and return trimmed UTF-8 stdout.
+ * Normalizes `execSync` return type (`string | Buffer` in current @types/node) for `.trim()` safety.
+ */
+export function execGitOutput(command: string, cwd: string): string {
+  const raw = execSync(command, gitExecSyncOptions(cwd));
+  const text = typeof raw === "string" ? raw : raw.toString("utf8");
+  return text.trim();
 }
