@@ -1,110 +1,79 @@
-# Token-Efficient, Structure-First Memory System for AI Coding (V2)
+# Mimir V2 — Structure-first, token-bounded memory for AI coding
 
-## A. Architecture
+Mimir keeps **context packets** strictly bounded on large codebases (10k+ files) by combining a **structural graph** (CodeRank centrality, coverage/churn), **YAML** serialization (~30% fewer tokens than JSON), **relevance-ranked** intents/tests/episodes, and **GC** that turns repeated failed hypotheses into durable rules.
 
-**System Overview**
-Mimir V2 extends the structure-first memory system with ultra-compression, graph-based context routing, and automatic garbage collection. It ensures that even in massive codebases (10k+ files), the Context Packet remains strictly bounded and highly relevant.
+## Architecture
 
-**V2 Component Map Upgrades**
-*   **Repo Cartographer**: Now performs a **CodeRank pass** (in-degree centrality) to identify core utility files vs. long-tail endpoints.
-*   **Telemetry Ingestor**: New module that reads execution traces to boost node **coverage weights**. Runtime truth overrides static AST guesses.
-*   **Lifecycle Manager**: 
-    *   **Blast-Radius Invalidation**: When a file changes, all its dependents are marked `STALE_UPSTREAM_CHANGE`.
-    *   **Episodic Consolidation**: Runs background GC to synthesize repeated `failed_hypotheses` into permanent `IntentLedger` Rules, purging bloated logs.
-*   **Context Packet Builder**: 
-    *   Now serializes to ultra-dense **YAML** instead of JSON to save ~30% token overhead.
-    *   Uses **CodeRank Pruning** to strictly slice the top 5 highest-weighted symbols based on Centrality and Coverage, dropping the long tail.
+| Piece | Role |
+|-------|------|
+| **Repo cartographer** | Ingests the repo; **CodeRank** (in-degree) highlights core vs. long-tail files. |
+| **Telemetry ingestor** | Execution traces boost node **coverage**; runtime-hit (or failing) paths gain weight vs. unused static dependencies. |
+| **Lifecycle manager** | **Blast-radius invalidation**: changed files mark dependents `STALE_UPSTREAM_CHANGE`. **Episodic consolidation**: GC promotes repeated `failed_hypotheses` to `IntentLedger` rules and trims episodes. |
+| **Context packet builder** | Emits dense **YAML** `ContextPacket`; **CodeRank pruning** adds at most **5 / 12 / 24** graph symbols for **scout / operate / investigate & forensics** (by centrality + coverage). |
+| **Storage** | SQLite: graph nodes (`centrality`, `coverage`, `churn`, `status`), intent ledger, episodes, `validation_registry`, area lessons. |
 
-**Storage Strategy**
-Still utilizing SQLite for immediate local persistence, with enhanced schema columns for `centrality`, `coverage`, `churn`, and `status`.
+**Schemas (high level):** `SubsystemCard` (~100-token domain summaries), `TraceEntry` (telemetry matching), `StructuralNode` (centrality/coverage/churn/status), intents, episodes, validations.
 
----
+## Proof demo
 
-## B. V2 Schemas
+```bash
+npx ts-node src/index.ts
+```
 
-*   **SubsystemCard**: For 100-token LLM-generated summaries of entire domains.
-*   **TraceEntry**: For telemetry execution matching.
-*   **StructuralNode Upgrades**: `centrality`, `coverage`, `churn`, and `status: "VALID" | "STALE_UPSTREAM_CHANGE"`.
+Demonstrates: YAML packet compression; CodeRank pruning; **episodic GC** (duplicate hypothesis → `AUTO_RULE_*`, episodes purged); **blast-radius** stale marking (e.g. editing `src/schemas.ts` cascades to dependents).
 
----
+## Design goals (limits addressed)
 
-## C. Proof (The V2 Demo)
-
-Run the demo via: `npx ts-node src/index.ts`
-
-**Key V2 Capabilities Proven:**
-1.  **YAML Ultra-Compression**: The packet is printed in dense YAML format, stripping brackets and quotes for token efficiency.
-2.  **CodeRank Pruning**: Only the highest-weighted related symbols make it into the context packet.
-3.  **Episodic Consolidation (GC)**: The demo intentionally fails twice with the hypothesis "Adding a delay before refresh fixes it". The Lifecycle Manager successfully detects this, creates an `AUTO_RULE`, and purges the raw episodic logs to prevent prompt bloat in the future.
-4.  **Blast-Radius Invalidation**: Modifying `src/schemas.ts` cascades through the graph, capable of marking all dependents as stale.
+- **Scale**: Rank by centrality + coverage; don’t dump all dependents — top symbols per budget.
+- **Episodic bloat**: Consolidation collapses many failures into one rule.
+- **Token cost**: YAML packets vs. JSON.
+- **Static vs. runtime**: Telemetry can overweight paths that actually run or fail.
 
 ---
 
-## D. Addressing AI Coding Context Limits
+## MCP (Cursor and other clients)
 
-*   **10,000 File Scale**: Solved by CodeRank. We no longer list all dependents. We score them by centrality and runtime coverage and only inject the top 5 into the `SCOUT` packet.
-*   **Episodic Bloat**: Solved by Consolidation. 100 failed attempts become 1 constitutional rule.
-*   **JSON Token Tax**: Solved by native YAML formatting.
-*   **Static AST Lies**: Solved by Telemetry ingestion. If a path is hit in runtime (or fails in runtime), its weight is doubled, forcing it into the Context Packet over unused static dependencies.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm install`.
 
----
+### Install vs. ingest
 
-## E. Using with Cursor (MCP Server)
+| | |
+|--|--|
+| **Install** | Clone repo, `npm install` — does **not** index your app. |
+| **Ingest** | Call **`mimir_ingest`** with **absolute path** to each project root. Expect **`structural_graph nodes: N`** (**N > 0**) and **`database:`** in the response. |
+| **Without ingest** | Ledger tools work (decisions, episodes, validations, packets from those), but **no `FILE:` / `SYMBOL:` graph** for that repo until ingested. Re-ingest after large refactors or stale graph. |
 
-Mimir V2 runs natively as a Model Context Protocol (MCP) server, allowing Cursor (and other MCP-compatible clients) to proactively govern memory and retrieve ultra-compressed context.
+### Cursor MCP entry
 
-### Installation
+**Settings → MCP → Add server:** type `command`, name `mimir`, command `node`, args `["<ABSOLUTE_PATH_TO_THIS_REPO>/bin/mimir-mcp.js"]`.
 
-1. Clone or copy this repository to your local machine (e.g., `~/tools/mimir`).
-2. Run `npm install`.
-3. The executable is located at `./bin/mimir-mcp.js`.
+### Tools
 
-### Indexing your application repository (separate step)
+| Tool | Purpose |
+|------|---------|
+| `mimir_ingest` | Build/update CodeRank graph for a repo path. |
+| `mimir_build_packet` | YAML context packet (task, mode, seeds). |
+| `mimir_expand_handle` | Expand `RULE:` / `CONSTRAINT:` / … / `TEST:` / `VERIFIER:` / `ATTEMPT:` / `FILE:` / `SYMBOL:` within token budget. |
+| `mimir_record_episode` | Task outcome, verdicts, failed hypotheses. |
+| `mimir_record_decision` | Intent ledger (RULE, CONSTRAINT, INVARIANT, DECISION, NON_GOAL). |
+| `mimir_record_validation` | `validation_registry` — **`TEST:`** / **`VERIFIER:`** in packets; `INVARIANT` registry type still shows as **`VERIFIER:`** in listings. |
+| `mimir_run_gc` | Episodic consolidation (AUTO_RULE synthesis, episode trim). |
 
-Installing Mimir (steps above) **does not** scan your application code. That is a **separate** step for each codebase you care about:
+### Graph coverage (`mimir_expand_handle`)
 
-1. With the MCP connected, call **`mimir_ingest`** with the **absolute path** to your project root (works for **pre-existing repos** and new projects alike).
-2. Wait for a successful response that includes **`structural_graph nodes: N`** (with **N > 0** for non-trivial trees) and the **`database:`** path.
-3. Only then should you rely on **`FILE:`** / **`SYMBOL:`** handles and graph-heavy context from **`mimir_build_packet`**.
+- **TS/JS**: `ts-morph` over `**/*.{ts,js}` (imports, classes, interfaces, functions).
+- **Python**: `**/*.py` (skips `.git`, `node_modules`, `.venv`, …): `FILE:` per file; top-level `def` / `async def` / `class` → `SYMBOL:relative/path.py::name` (regex; not a full type system).
+- **`FILE:`** ids are **absolute** on disk; expansion also matches **relative** paths by suffix. Re-ingest after upgrading Mimir if you need refreshed Python indexing.
 
-Without ingest, **ledger** features still work (rules, episodes, validations you record), but there is **no structural graph** for that repo until you index it. Re-run **`mimir_ingest`** after major refactors or when graph-backed context seems stale.
+### Database
 
-### Adding to Cursor Settings
+Single SQLite file:
 
-1. Open Cursor and navigate to **Settings > Cursor Settings > Features > MCP Settings** (or equivalent MCP tool tab).
-2. Click **Add New MCP Server**.
-3. Enter the following details:
-   - **Type:** `command`
-   - **Name:** `mimir`
-   - **Command:** `node`
-   - **Args:** `["<PATH_TO_MIMIR_REPO>/bin/mimir-mcp.js"]` *(replace `<PATH_TO_MIMIR_REPO>` with the absolute path to this folder).*
+- **Default:** `<MIMIR_repo>/mimir.db` (next to `package.json`, **not** `cwd`).
+- **Override:** `MIMIR_DB_PATH` (absolute) in the MCP process env.
 
-### Available MCP Tools inside Cursor
-Once attached, the Cursor Agent will have access to the following capabilities:
-- **`mimir_ingest`**: Scan the local codebase into the CodeRank structural graph.
-- **`mimir_build_packet`**: Request a YAML `ContextPacket` based on a task (e.g., `bug_fix`).
-- **`mimir_expand_handle`**: Lazily expand concise references (e.g., `TEST:xyz`) if the current budget allows.
-- **`mimir_record_episode`**: Log task outcomes, assumed paths, and importantly, failed hypotheses.
-- **`mimir_record_decision`**: Hardcode architectural invariants into the Constitutional Intent Ledger.
-- **`mimir_record_validation`**: Register or update entries in `validation_registry` (tests and verifiers). Produces **`TEST:`** / **`VERIFIER:`** handles in packets; use this instead of manual SQLite when adding validations.
-- **`mimir_run_gc`**: Manually trigger Episodic GC to synthesize repeated failures into permanent Rules.
+Stderr on start: `[mimir-mcp] database: /path/to/mimir.db`.
 
-### Ingest coverage and `mimir_expand_handle`
+### Reset / cleanup
 
-- **TypeScript / JavaScript**: Parsed with `ts-morph` (imports, classes, interfaces, functions) under `**/*.{ts,js}`.
-- **Python**: After the TS/JS pass, all `**/*.py` files under the ingest root are scanned (skipping common dirs like `.git`, `node_modules`, `.venv`). Each file becomes a `FILE:` node; top-level `def` / `async def` / `class` names become `SYMBOL:relative/path.py::name` entries (regex-based, not a full type system).
-- **Stored `FILE:` ids** use the **absolute** path on disk. The packet may show relative paths; **`mimir_expand_handle`** also resolves `FILE:relative/path` by suffix match against ingested files.
-- **Re-ingest** after pulling a new Mimir version if you need updated Python indexing: run `mimir_ingest` again on your project root.
-
-### Database file location (MCP)
-
-The MCP server stores state in a **single** SQLite file:
-
-- **Default:** `<directory containing the Mimir clone>/mimir.db` (next to `package.json`, **not** `process.cwd()`). Cursor’s cwd varies by workspace; binding the DB to the Mimir install path keeps **ingest graph rows** and **ledger/episodes** in one place.
-- **Override:** set environment variable **`MIMIR_DB_PATH`** to an absolute path of your choice when launching the MCP process (e.g. in Cursor MCP config `env`).
-
-On startup, the server logs a line to stderr: `[mimir-mcp] database: /path/to/mimir.db` — use that to confirm which file tools are using.
-
-### Clearing local MCP data (smoke tests, experiments)
-
-Stop the MCP server, then delete the `mimir.db` file you see in the log above (or remove specific rows from `intent_ledger` / `episode_journal` / `validation_registry` / `structural_graph`).
+Stop MCP, then delete that `mimir.db` or delete rows from `intent_ledger`, `episode_journal`, `validation_registry`, `structural_graph` as needed.
