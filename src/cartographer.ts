@@ -1,10 +1,11 @@
 import { Project, SourceFile } from "ts-morph";
 import * as crypto from "crypto";
-import { execSync } from "child_process";
 import * as fs from "fs";
 import { promises as fsp } from "fs";
 import { StorageLayer } from "./storage";
 import { StructuralNode } from "./schemas";
+import { readLiveGitHead } from "./git_util";
+import { shouldExcludeFromIngest } from "./ingest_exclude";
 import * as path from "path";
 
 const PY_DEF = /^(?:async\s+)?def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/gm;
@@ -41,6 +42,7 @@ export class RepoCartographer {
 
     for (const sourceFile of project.getSourceFiles()) {
       const filePath = sourceFile.getFilePath();
+      if (shouldExcludeFromIngest(filePath)) continue;
       const content = sourceFile.getFullText();
       const hash = crypto.createHash("sha256").update(content).digest("hex");
 
@@ -138,7 +140,7 @@ export class RepoCartographer {
 
     await this.storage.setMetadata("ingest_root", rootAbs);
     await this.storage.setMetadata("ingested_at", new Date().toISOString());
-    await this.storage.setMetadata("git_head", this.tryGitSha(rootAbs) || "");
+    await this.storage.setMetadata("git_head", readLiveGitHead(rootAbs) || "");
   }
 
   private scopedSymbolId(rootAbs: string, filePath: string, qualifiedName: string): string {
@@ -148,11 +150,26 @@ export class RepoCartographer {
 
   /** ts-morph does not parse Python; add FILE + lightweight SYMBOL rows for .py so expand_handle works. */
   private async ingestPythonFiles(rootAbs: string) {
-    const skip = new Set(["node_modules", ".git", "dist", "build", "__pycache__", ".venv", "venv", ".mypy_cache"]);
+    const skip = new Set([
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      "__pycache__",
+      ".venv",
+      "venv",
+      ".mypy_cache",
+      ".next",
+      "coverage",
+      "vendor",
+      "__generated__",
+      "generated",
+    ]);
     const pyPaths: string[] = [];
     walkPyFiles(rootAbs, skip, pyPaths);
 
     for (const filePath of pyPaths) {
+      if (shouldExcludeFromIngest(filePath)) continue;
       const content = await fsp.readFile(filePath, "utf8");
       const hash = crypto.createHash("sha256").update(content).digest("hex");
       await this.storage.removeNodesByPath(filePath);
@@ -207,18 +224,6 @@ export class RepoCartographer {
       }
     }
     return out;
-  }
-
-  private tryGitSha(cwd: string): string | null {
-    try {
-      return execSync("git rev-parse HEAD", {
-        cwd,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    } catch {
-      return null;
-    }
   }
 
   private async backfillDependents() {

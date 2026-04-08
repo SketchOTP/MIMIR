@@ -84,6 +84,21 @@ export class StorageLayer {
         updated_at TEXT
       );
     `);
+    await this.migrateSchema();
+  }
+
+  /** Add columns for existing mimir.db files created before these fields existed. */
+  private async migrateSchema(): Promise<void> {
+    await this.ensureColumn("intent_ledger", "binding", "ALTER TABLE intent_ledger ADD COLUMN binding TEXT DEFAULT 'soft'");
+    await this.ensureColumn("intent_ledger", "reference_url", "ALTER TABLE intent_ledger ADD COLUMN reference_url TEXT");
+    await this.ensureColumn("episode_journal", "provenance_json", "ALTER TABLE episode_journal ADD COLUMN provenance_json TEXT");
+    await this.ensureColumn("validation_registry", "provenance_json", "ALTER TABLE validation_registry ADD COLUMN provenance_json TEXT");
+  }
+
+  private async ensureColumn(table: string, column: string, ddl: string): Promise<void> {
+    const rows = await this.db.all(`PRAGMA table_info(${table})`);
+    const names = new Set(rows.map((r: { name: string }) => r.name));
+    if (!names.has(column)) await this.db.exec(ddl);
   }
 
   async setMetadata(key: string, value: string): Promise<void> {
@@ -150,24 +165,59 @@ export class StorageLayer {
   }
 
   async saveIntent(intent: IntentDecision) {
+    const binding = intent.binding ?? "soft";
+    const ref = intent.reference_url ?? null;
     await this.db.run(
-      `INSERT OR REPLACE INTO intent_ledger (id, type, description, target_scope) VALUES (?, ?, ?, ?)`,
-      intent.id, intent.type, intent.description, JSON.stringify(intent.target_scope)
+      `INSERT OR REPLACE INTO intent_ledger (id, type, description, target_scope, binding, reference_url) VALUES (?, ?, ?, ?, ?, ?)`,
+      intent.id,
+      intent.type,
+      intent.description,
+      JSON.stringify(intent.target_scope),
+      binding,
+      ref
     );
   }
 
   async getIntents(): Promise<IntentDecision[]> {
     const rows = await this.db.all(`SELECT * FROM intent_ledger`);
-    return rows.map(r => ({
-      ...r,
-      target_scope: JSON.parse(r.target_scope)
-    }));
+    return rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      return {
+        id: row.id as string,
+        type: row.type as IntentDecision["type"],
+        description: row.description as string,
+        target_scope: JSON.parse(row.target_scope as string),
+        binding: (row.binding as IntentDecision["binding"]) || "soft",
+        reference_url: (row.reference_url as string) || undefined,
+      };
+    });
+  }
+
+  async deleteIntent(id: string): Promise<void> {
+    await this.db.run(`DELETE FROM intent_ledger WHERE id = ?`, id);
   }
 
   async saveEpisode(episode: EpisodeEntry) {
+    const prov =
+      episode.provenance && Object.keys(episode.provenance).length > 0
+        ? JSON.stringify(episode.provenance)
+        : null;
     await this.db.run(
-      `INSERT OR REPLACE INTO episode_journal (task_id, timestamp, objective, assumptions, files_touched, commands_run, outputs_summarized, tests_run, verdicts, failed_hypotheses, accepted_solution, residual_risks, next_best_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      episode.task_id, episode.timestamp, episode.objective, JSON.stringify(episode.assumptions), JSON.stringify(episode.files_touched), JSON.stringify(episode.commands_run), episode.outputs_summarized, JSON.stringify(episode.tests_run), episode.verdicts, JSON.stringify(episode.failed_hypotheses), episode.accepted_solution || "", JSON.stringify(episode.residual_risks), episode.next_best_action
+      `INSERT OR REPLACE INTO episode_journal (task_id, timestamp, objective, assumptions, files_touched, commands_run, outputs_summarized, tests_run, verdicts, failed_hypotheses, accepted_solution, residual_risks, next_best_action, provenance_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      episode.task_id,
+      episode.timestamp,
+      episode.objective,
+      JSON.stringify(episode.assumptions),
+      JSON.stringify(episode.files_touched),
+      JSON.stringify(episode.commands_run),
+      episode.outputs_summarized,
+      JSON.stringify(episode.tests_run),
+      episode.verdicts,
+      JSON.stringify(episode.failed_hypotheses),
+      episode.accepted_solution || "",
+      JSON.stringify(episode.residual_risks),
+      episode.next_best_action,
+      prov
     );
   }
 
@@ -177,32 +227,82 @@ export class StorageLayer {
 
   async getEpisodes(): Promise<EpisodeEntry[]> {
     const rows = await this.db.all(`SELECT * FROM episode_journal`);
-    return rows.map(r => ({
-      ...r,
-      assumptions: JSON.parse(r.assumptions),
-      files_touched: JSON.parse(r.files_touched),
-      commands_run: JSON.parse(r.commands_run),
-      tests_run: JSON.parse(r.tests_run),
-      failed_hypotheses: JSON.parse(r.failed_hypotheses),
-      residual_risks: JSON.parse(r.residual_risks)
-    }));
+    return rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      let provenance: EpisodeEntry["provenance"];
+      const pj = row.provenance_json as string | null | undefined;
+      if (pj && pj.length > 0) {
+        try {
+          provenance = JSON.parse(pj);
+        } catch {
+          provenance = undefined;
+        }
+      }
+      return {
+        task_id: row.task_id as string,
+        timestamp: row.timestamp as string,
+        objective: row.objective as string,
+        assumptions: JSON.parse(row.assumptions as string),
+        files_touched: JSON.parse(row.files_touched as string),
+        commands_run: JSON.parse(row.commands_run as string),
+        outputs_summarized: row.outputs_summarized as string,
+        tests_run: JSON.parse(row.tests_run as string),
+        verdicts: row.verdicts as EpisodeEntry["verdicts"],
+        failed_hypotheses: JSON.parse(row.failed_hypotheses as string),
+        accepted_solution: (row.accepted_solution as string) || undefined,
+        residual_risks: JSON.parse(row.residual_risks as string),
+        next_best_action: row.next_best_action as string,
+        provenance,
+      };
+    });
   }
 
   async saveValidation(validation: ValidationEntry) {
+    const prov =
+      validation.provenance && Object.keys(validation.provenance).length > 0
+        ? JSON.stringify(validation.provenance)
+        : null;
     await this.db.run(
-      `INSERT OR REPLACE INTO validation_registry (id, type, target_symbols, target_files, known_failure_signatures, last_run_verdict, last_run_timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      validation.id, validation.type, JSON.stringify(validation.target_symbols), JSON.stringify(validation.target_files), JSON.stringify(validation.known_failure_signatures), validation.last_run_verdict, validation.last_run_timestamp
+      `INSERT OR REPLACE INTO validation_registry (id, type, target_symbols, target_files, known_failure_signatures, last_run_verdict, last_run_timestamp, provenance_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      validation.id,
+      validation.type,
+      JSON.stringify(validation.target_symbols),
+      JSON.stringify(validation.target_files),
+      JSON.stringify(validation.known_failure_signatures),
+      validation.last_run_verdict,
+      validation.last_run_timestamp,
+      prov
     );
   }
 
   async getValidations(): Promise<ValidationEntry[]> {
     const rows = await this.db.all(`SELECT * FROM validation_registry`);
-    return rows.map(r => ({
-      ...r,
-      target_symbols: JSON.parse(r.target_symbols),
-      target_files: JSON.parse(r.target_files),
-      known_failure_signatures: JSON.parse(r.known_failure_signatures)
-    }));
+    return rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      let provenance: ValidationEntry["provenance"];
+      const pj = row.provenance_json as string | null | undefined;
+      if (pj && pj.length > 0) {
+        try {
+          provenance = JSON.parse(pj);
+        } catch {
+          provenance = undefined;
+        }
+      }
+      return {
+        id: row.id as string,
+        type: row.type as ValidationEntry["type"],
+        target_symbols: JSON.parse(row.target_symbols as string),
+        target_files: JSON.parse(row.target_files as string),
+        known_failure_signatures: JSON.parse(row.known_failure_signatures as string),
+        last_run_verdict: row.last_run_verdict as ValidationEntry["last_run_verdict"],
+        last_run_timestamp: row.last_run_timestamp as string,
+        provenance,
+      };
+    });
+  }
+
+  async deleteValidation(id: string): Promise<void> {
+    await this.db.run(`DELETE FROM validation_registry WHERE id = ?`, id);
   }
 
   async saveStructuralNode(node: StructuralNode) {

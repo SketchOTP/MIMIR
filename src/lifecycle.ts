@@ -48,6 +48,7 @@ export class LifecycleManager {
           type: "RULE",
           description: `Consolidated from ${count} failures: Avoid '${hyp}'`,
           target_scope: {},
+          binding: "soft",
         });
 
         await this.storage.upsertLessonLine(

@@ -13,6 +13,7 @@ Memory and coding context for this workspace are governed by the **Mimir MCP**. 
 - **Indexing** means: calling **`mimir_ingest`** once with the **absolute path** to the **project root** you are working on (pre-existing repo or new—same requirement).
 - **Without ingest**, the **ledger** still works (`mimir_record_decision`, `mimir_record_validation`, episodes, `mimir_build_packet` for rules/tests you have recorded), but **`FILE:` / `SYMBOL:`** graph data does not exist for that codebase—**`mimir_expand_handle`** and graph slices in the packet will not reflect the repo until you ingest it.
 - **When to ingest first:** before relying on graph-backed symbols for this project, or after a large refactor / clone / Mimir upgrade that should refresh the graph. Confirm the tool response shows a **non-zero** `structural_graph nodes` count.
+- **Stale graph signal:** if **`selection_meta.ingest_freshness`** shows **`graph_matches_ingest_head: false`**, run **`mimir_ingest`** again on the **same absolute root** so the graph matches your current git HEAD.
 
 ## Tool reference (use the real MCP tools)
 
@@ -24,6 +25,8 @@ Memory and coding context for this workspace are governed by the **Mimir MCP**. 
 | `mimir_record_episode` | **End** of work or when stopping on a dead end (see below). |
 | `mimir_record_decision` | When you establish or change a durable rule, invariant, or non-goal for this codebase. |
 | `mimir_record_validation` | When you register or update a **test** or **verifier** so `TEST:` / `VERIFIER:` handles work without manual SQLite. |
+| `mimir_query_memory` | To inspect intents, validations, or episodes (JSON, capped) without building a full packet. |
+| `mimir_delete_memory` | To remove one ledger row by id (cleanup / experiments). |
 | `mimir_run_gc` | After repeated failed hypotheses are recorded; consolidates into rules and trims episodic noise (when appropriate). |
 
 ## 1. Start phase (mandatory for code / architecture work)
@@ -38,7 +41,7 @@ Before writing code or giving deep architectural answers:
    - **`mode`**: start with **`scout`**; move to **`operate`**, **`investigate`**, or **`forensics`** only if the packet or handles require deeper token budget.
    - **`symbols`**: best-effort seeds (including `SYMBOL:path::Name` forms after ingest).
    - **`files`**: relevant absolute or project-relative paths.
-3. Read the full **YAML Context Packet** output. Treat **`constraints`**, **`invariants`**, **`lesson_hints`**, and **`selection_meta`** as first-class inputs.
+3. Read the full **YAML Context Packet** output. Treat **`constraints`**, **`invariants`**, **`lesson_hints`**, **`selection_meta`** (including **`ingest_freshness`**), and **`open_questions`** (duplicate-intent hints) as first-class inputs.
 
 Do not skip this phase for substantive work when Mimir is available.
 
@@ -50,7 +53,7 @@ Do not skip this phase for substantive work when Mimir is available.
 ## 3. Execution phase
 
 - Implement changes consistent with the packet (constraints, invariants, graph symbols marked stale, etc.).
-- If you make a lasting architectural commitment, call **`mimir_record_decision`** with a stable **`id`**, **`type`**, and **`description`**.
+- If you make a lasting architectural commitment, call **`mimir_record_decision`** with a stable **`id`**, **`type`**, and **`description`**. Use **`binding: hard`** for rules that must dominate the packet; optional **`reference_url`** for ADR/issue links.
 - If you introduce or rely on a tracked test or verifier for this codebase, call **`mimir_record_validation`** so **`TEST:`** / **`VERIFIER:`** handles stay in sync with the DB.
 
 ## 4. Completion phase (mandatory)
@@ -67,6 +70,6 @@ If the same wrong hypothesis repeats across episodes, consider **`mimir_run_gc`*
 
 - Do not fabricate packet contents; if a tool errors, say so and proceed with limited scope.
 - Keep **`task_id`** stable within one task so episodes stay correlated.
-- Secrets and one-off credentials must **not** be written into Mimir fields; describe them obliquely if needed.
+- Secrets and one-off credentials must **not** be written into Mimir fields; describe them obliquely if needed. The server **rejects** common secret patterns in writes unless **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`** is set (avoid).
 - Graph **`FILE:`** / **`SYMBOL:`** expansion requires those nodes to exist: run **`mimir_ingest`** on the **absolute** project root after checkout or Mimir upgrades. Use handle forms from the packet (`SYMBOL:relative/path.py::symbol`); `SYMBOL:pkg.module::name` is not a valid graph id unless ingested that way.
 - If ingest reports success but **`mimir_expand_handle`** still fails for `FILE:`/`SYMBOL:`, check the ingest response for **`structural_graph nodes: N`** and **`database: /path/to/mimir.db`**. **`N = 0`** means no graph was indexed (wrong path or unreadable tree). **`MIMIR_DB_PATH`** overrides where state is stored; the MCP logs **`[mimir-mcp] database: ...`** on stderr.

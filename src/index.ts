@@ -58,6 +58,38 @@ export class MemorySystemAPI {
   async invalidate_stale_memory(changedPaths: string[]): Promise<void> {
     await this.lifecycleManager.invalidateStaleMemory(changedPaths);
   }
+
+  /** JSON snapshot of ledger rows for solo inspection (capped). */
+  async query_memory(
+    filter: "all" | "intents" | "validations" | "episodes",
+    limit: number
+  ): Promise<string> {
+    const lim = Math.min(Math.max(1, limit), 200);
+    const out: Record<string, unknown> = {};
+    if (filter === "all" || filter === "intents") {
+      const rows = await this.storage.getIntents();
+      out.intents = rows.slice(0, lim);
+      out.intents_omitted = Math.max(0, rows.length - lim);
+    }
+    if (filter === "all" || filter === "validations") {
+      const rows = await this.storage.getValidations();
+      out.validations = rows.slice(0, lim);
+      out.validations_omitted = Math.max(0, rows.length - lim);
+    }
+    if (filter === "all" || filter === "episodes") {
+      const rows = await this.storage.getEpisodes();
+      const sorted = [...rows].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+      out.episodes = sorted.slice(0, lim);
+      out.episodes_omitted = Math.max(0, sorted.length - lim);
+    }
+    return JSON.stringify(out, null, 2);
+  }
+
+  async delete_memory(kind: "intent" | "validation" | "episode", id: string): Promise<void> {
+    if (kind === "intent") await this.storage.deleteIntent(id);
+    else if (kind === "validation") await this.storage.deleteValidation(id);
+    else await this.storage.deleteEpisode(id);
+  }
 }
 
 // ---------------------------------------------------------------------

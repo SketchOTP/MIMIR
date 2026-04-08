@@ -6,8 +6,23 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { MemorySystemAPI } from "./index";
-import { BudgetMode, TaskType, ValidationEntry } from "./schemas";
+import { BudgetMode, TaskType, ValidationEntry, RecordProvenance, IntentDecision } from "./schemas";
+import { scanRecordedPayload } from "./secrets";
 import * as path from "path";
+
+function guardSecrets(label: string, payload: unknown): void {
+  const r = scanRecordedPayload(label, payload);
+  if (!r.ok) throw new Error(r.reason);
+}
+
+function pickProvenance(v: Record<string, unknown>): RecordProvenance | undefined {
+  const p: RecordProvenance = {};
+  if (typeof v.commit_sha === "string" && v.commit_sha) p.commit_sha = v.commit_sha;
+  if (typeof v.ci_run_url === "string" && v.ci_run_url) p.ci_run_url = v.ci_run_url;
+  if (typeof v.ci_run_id === "string" && v.ci_run_id) p.ci_run_id = v.ci_run_id;
+  if (typeof v.repo_head_at_close === "string" && v.repo_head_at_close) p.repo_head_at_close = v.repo_head_at_close;
+  return Object.keys(p).length > 0 ? p : undefined;
+}
 
 /** Stable DB location: default is <MIMIR repo root>/mimir.db (parent of src/), not process.cwd() (Cursor varies cwd). */
 function resolveMcpDbPath(): string {
@@ -20,7 +35,7 @@ function resolveMcpDbPath(): string {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "2.2.0",
+    version: "3.0.0",
   },
   {
     capabilities: {
@@ -120,21 +135,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             failed_hypotheses: { type: "array", items: { type: "string" }, description: "Crucial: list explicitly what you tried that did NOT work." },
             accepted_solution: { type: "string" },
             residual_risks: { type: "array", items: { type: "string" } },
-            next_best_action: { type: "string" }
+            next_best_action: { type: "string" },
+            commit_sha: { type: "string", description: "Optional repo commit for audit trail." },
+            ci_run_url: { type: "string", description: "Optional CI run / Actions URL." },
+            ci_run_id: { type: "string", description: "Optional CI run id." },
+            repo_head_at_close: { type: "string", description: "Optional git HEAD when recording (e.g. git rev-parse)." },
           },
           required: ["task_id", "objective", "assumptions", "files_touched", "commands_run", "outputs_summarized", "tests_run", "verdicts", "failed_hypotheses", "residual_risks", "next_best_action"],
         },
       },
       {
         name: "mimir_record_decision",
-        description: "Saves long-term architectural constraints, invariants, or non-goals into the Intent Ledger.",
+        description:
+          "Saves long-term architectural constraints, invariants, or non-goals into the Intent Ledger. Use binding=hard for constitutional rules (listed first in packets).",
         inputSchema: {
           type: "object",
           properties: {
             id: { type: "string", description: "Unique ID without spaces, e.g., NO_DIRECT_DB_ACCESS" },
             type: { type: "string", enum: ["RULE", "CONSTRAINT", "INVARIANT", "DECISION", "NON_GOAL"] },
             description: { type: "string", description: "Clear explanation of the rule." },
-            subsystems: { type: "array", items: { type: "string" } }
+            subsystems: { type: "array", items: { type: "string" } },
+            binding: {
+              type: "string",
+              enum: ["hard", "soft"],
+              description: "hard = prioritize in context packets; soft = default.",
+            },
+            reference_url: { type: "string", description: "Optional ADR / issue / doc URL." },
           },
           required: ["id", "type", "description"],
         },
@@ -157,8 +183,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Latest known result (default PENDING).",
             },
             last_run_timestamp: { type: "string", description: "ISO timestamp; defaults to now if omitted." },
+            commit_sha: { type: "string", description: "Optional commit this run refers to." },
+            ci_run_url: { type: "string", description: "Optional CI URL." },
+            ci_run_id: { type: "string", description: "Optional CI run id." },
           },
           required: ["id", "type"],
+        },
+      },
+      {
+        name: "mimir_query_memory",
+        description:
+          "Returns a JSON snapshot of intents, validations, and/or episodes (capped) for solo inspection without building a full packet.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              enum: ["all", "intents", "validations", "episodes"],
+              description: "Which tables to include.",
+            },
+            limit: { type: "number", description: "Max rows per table (1–200, default 40)." },
+          },
+          required: ["filter"],
+        },
+      },
+      {
+        name: "mimir_delete_memory",
+        description: "Deletes one intent, validation, or episode row by id (use for smoke-test cleanup).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["intent", "validation", "episode"] },
+            id: {
+              type: "string",
+              description: "Intent id, validation id, or episode task_id depending on kind.",
+            },
+          },
+          required: ["kind", "id"],
         },
       },
       {
@@ -214,19 +275,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } 
     
     else if (name === "mimir_record_episode") {
-      const ep = args as any;
-      ep.timestamp = new Date().toISOString();
-      await memory.record_episode(ep);
+      const ep = args as Record<string, unknown>;
+      guardSecrets("mimir_record_episode", ep);
+      const prov = pickProvenance(ep);
+      await memory.record_episode({
+        task_id: String(ep.task_id),
+        timestamp: new Date().toISOString(),
+        objective: String(ep.objective),
+        assumptions: ep.assumptions as string[],
+        files_touched: ep.files_touched as string[],
+        commands_run: ep.commands_run as string[],
+        outputs_summarized: String(ep.outputs_summarized),
+        tests_run: ep.tests_run as string[],
+        verdicts: ep.verdicts as "PASS" | "FAIL" | "ERROR" | "PENDING",
+        failed_hypotheses: ep.failed_hypotheses as string[],
+        accepted_solution: typeof ep.accepted_solution === "string" ? ep.accepted_solution : undefined,
+        residual_risks: ep.residual_risks as string[],
+        next_best_action: String(ep.next_best_action),
+        provenance: prov,
+      });
       return { content: [{ type: "text", text: `Successfully recorded episode for task ${ep.task_id}.` }] };
     } 
     
     else if (name === "mimir_record_decision") {
-      const dec = args as any;
+      const dec = args as Record<string, unknown>;
+      guardSecrets("mimir_record_decision", dec);
+      const bindingRaw = dec.binding;
+      const binding: IntentDecision["binding"] | undefined =
+        bindingRaw === "hard" || bindingRaw === "soft" ? bindingRaw : undefined;
       await memory.record_decision({
-         id: dec.id,
-         type: dec.type,
-         description: dec.description,
-         target_scope: { subsystems: dec.subsystems || [] }
+        id: String(dec.id),
+        type: dec.type as IntentDecision["type"],
+        description: String(dec.description),
+        target_scope: { subsystems: Array.isArray(dec.subsystems) ? (dec.subsystems as string[]) : [] },
+        binding,
+        reference_url: typeof dec.reference_url === "string" && dec.reference_url.length > 0 ? dec.reference_url : undefined,
       });
       const handlePrefix =
         dec.type === "CONSTRAINT" ? "CONSTRAINT" :
@@ -251,7 +334,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           typeof v.last_run_timestamp === "string" && v.last_run_timestamp.length > 0
             ? v.last_run_timestamp
             : new Date().toISOString(),
+        provenance: pickProvenance(v),
       };
+      guardSecrets("mimir_record_validation", entry);
       await memory.record_validation(entry);
       const packetHandle = entry.type === "TEST" ? `TEST:${entry.id}` : `VERIFIER:${entry.id}`;
       return {
@@ -262,6 +347,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         ],
       };
+    }
+
+    else if (name === "mimir_query_memory") {
+      const q = args as Record<string, unknown>;
+      const filter = (q.filter as "all" | "intents" | "validations" | "episodes") || "all";
+      const limit = typeof q.limit === "number" && !Number.isNaN(q.limit) ? q.limit : 40;
+      const json = await memory.query_memory(filter, limit);
+      return { content: [{ type: "text", text: json }] };
+    }
+
+    else if (name === "mimir_delete_memory") {
+      const d = args as Record<string, unknown>;
+      const kind = d.kind as "intent" | "validation" | "episode";
+      const id = String(d.id);
+      await memory.delete_memory(kind, id);
+      return { content: [{ type: "text", text: `Deleted ${kind} ${id}.` }] };
     }
 
     else if (name === "mimir_run_gc") {

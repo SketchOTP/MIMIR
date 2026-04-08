@@ -22,12 +22,23 @@ export interface TokenBudget {
   used_tokens: number;
 }
 
+export interface IngestFreshness {
+  /** HEAD read live from ingest_root on the machine running MCP (may differ from stored after local commits). */
+  live_git_head: string | null;
+  /** True when live and stored heads match (or neither set). */
+  graph_matches_ingest_head: boolean;
+  /** Non-null when re-ingest is recommended. */
+  recommendation: string | null;
+}
+
 export interface ContextSelectionMeta {
   ingest: {
     root: string;
     ingested_at: string | null;
     git_head: string | null;
   } | null;
+  /** Compares stored ingest git_head to live `git rev-parse` at ingest root (solo dev stale-graph signal). */
+  ingest_freshness: IngestFreshness | null;
   omitted: {
     intents: number;
     validations: number;
@@ -62,6 +73,15 @@ export interface ContextPacket {
   provenance_summary: Record<ProvenanceTier, number>;
 }
 
+/** Optional CI / repo pins for solo audit trail (episodes & validations). */
+export interface RecordProvenance {
+  commit_sha?: string;
+  ci_run_url?: string;
+  ci_run_id?: string;
+  /** Repo HEAD when episode closed (e.g. output of git rev-parse). */
+  repo_head_at_close?: string;
+}
+
 export interface EpisodeEntry {
   task_id: string;
   timestamp: string;
@@ -76,6 +96,7 @@ export interface EpisodeEntry {
   accepted_solution?: string;
   residual_risks: string[];
   next_best_action: string;
+  provenance?: RecordProvenance;
 }
 
 export interface ValidationEntry {
@@ -86,7 +107,10 @@ export interface ValidationEntry {
   known_failure_signatures: string[];
   last_run_verdict: "PASS" | "FAIL" | "PENDING";
   last_run_timestamp: string;
+  provenance?: RecordProvenance;
 }
+
+export type IntentBinding = "hard" | "soft";
 
 export interface IntentDecision {
   id: string;
@@ -97,6 +121,10 @@ export interface IntentDecision {
     files?: string[];
     symbols?: string[];
   };
+  /** hard = prioritize in packets (constitutional); soft = default. */
+  binding?: IntentBinding;
+  /** Optional ADR / issue / doc URL. */
+  reference_url?: string;
 }
 
 export interface StructuralNode {

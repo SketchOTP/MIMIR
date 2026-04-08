@@ -9,6 +9,7 @@ import {
   buildSeedFileIds,
   normalizeFsPath,
 } from "./relevance";
+import { readLiveGitHead } from "./git_util";
 import * as yaml from "js-yaml";
 
 function intentHandle(intent: IntentDecision): string {
@@ -38,6 +39,28 @@ function pushIntentToPacket(packet: ContextPacket, handle: string, intent: Inten
   }
 }
 
+/** Near-duplicate intent descriptions (solo cleanup signal). */
+function duplicateIntentNotes(intents: IntentDecision[]): string[] {
+  const buckets = new Map<string, string[]>();
+  for (const i of intents) {
+    const key = i.description
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .slice(0, 120);
+    if (key.length < 16) continue;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(intentHandle(i));
+  }
+  const out: string[] = [];
+  for (const ids of buckets.values()) {
+    if (ids.length >= 2) {
+      out.push(`Similar intent descriptions — consider merging: ${ids.join(" vs ")}`);
+    }
+  }
+  return out.slice(0, 6);
+}
+
 export class ContextPacketBuilder {
   constructor(private storage: StorageLayer, private governor: TokenGovernor) {}
 
@@ -56,6 +79,22 @@ export class ContextPacketBuilder {
     const ingestRoot = await this.storage.getMetadata("ingest_root");
     const ingestedAt = await this.storage.getMetadata("ingested_at");
     const gitHead = await this.storage.getMetadata("git_head");
+
+    const liveHead = ingestRoot ? readLiveGitHead(ingestRoot) : null;
+    const storedHead = gitHead && gitHead.length > 0 ? gitHead : null;
+    const graphMatches =
+      !storedHead || !liveHead ? true : storedHead === liveHead;
+    const ingestFreshness =
+      ingestRoot != null
+        ? {
+            live_git_head: liveHead,
+            graph_matches_ingest_head: graphMatches,
+            recommendation:
+              storedHead && liveHead && storedHead !== liveHead
+                ? "Local git HEAD differs from last mimir_ingest; re-run mimir_ingest on the same absolute root to refresh FILE:/SYMBOL: graph."
+                : null,
+          }
+        : null;
 
     const lessonHints = await this.storage.getLessonsForPaths(files);
 
@@ -88,6 +127,7 @@ export class ContextPacketBuilder {
                 git_head: gitHead && gitHead.length > 0 ? gitHead : null,
               }
             : null,
+        ingest_freshness: ingestFreshness,
         omitted: {
           intents: 0,
           validations: 0,
@@ -107,9 +147,18 @@ export class ContextPacketBuilder {
     };
 
     const intents = await this.storage.getIntents();
+    for (const note of duplicateIntentNotes(intents)) {
+      if (packet.open_questions.length < 8) packet.open_questions.push(note);
+    }
+
     const rankedIntents = intents
       .map((i) => ({ i, s: scoreIntent(i, objective, taskType, files) }))
-      .sort((a, b) => b.s - a.s);
+      .sort((a, b) => {
+        const pri = (x: { i: IntentDecision }) => (x.i.binding === "hard" ? 0 : 1);
+        const d = pri(a) - pri(b);
+        if (d !== 0) return d;
+        return b.s - a.s;
+      });
 
     let intentAdded = 0;
     for (let idx = 0; idx < rankedIntents.length; idx++) {
