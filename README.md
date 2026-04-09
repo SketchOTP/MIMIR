@@ -128,9 +128,9 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.6**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.7**.
 
-One-shot **Obsidian backfill** (SQLite → `10_KGRAPH/KG/<slug>/`): copy `.mimir/config.example.yaml` to `.mimir/config.yaml`, set `vault_path`, then `npm run obsidian-backfill` (or MCP tool **`mimir_obsidian_backfill`**).
+One-shot **Obsidian backfill** (SQLite → `KGRAPH/<slug>/`): copy `.mimir/config.example.yaml` to `.mimir/config.yaml`, set `vault_path`, then `npm run obsidian-backfill` (or MCP tool **`mimir_obsidian_backfill`**).
 
 ### Install vs. ingest
 
@@ -232,14 +232,16 @@ Stderr on start: `[mimir-mcp] platform: …` then `[mimir-mcp] database: /path/t
 
 #### Default layout (when a vault path resolves)
 
-- **Mirror root:** `<vault>/10_KGRAPH/KG/<project_slug>/` with `Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, and **`MOC.md`**.
+- **Knowledge graph root:** `<vault>/KGRAPH/<project_slug>/` with `Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, and **`MOC.md`**.
 - **Project slug:** **`MIMIR_OBSIDIAN_PROJECT_SLUG`** (default **`mimir`**). Use another repo’s slug when that project uses the same vault.
-- **Registry stub:** **`01_PROJECTS/<slug>.md`** is created if missing (links into the KG mirror).
+- **Project note:** **`01_PROJECTS/<slug>.md`** — title (**`obsidian.project_name`** or env **`MIMIR_OBSIDIAN_PROJECT_NAME`**) plus the **full README** (default: `README.md` at the Mimir install root, or **`obsidian.readme_path`** / **`MIMIR_OBSIDIAN_README_PATH`**), then a short “Knowledge graph” section linking into **`KGRAPH/<slug>/`**.
 
 **Overrides:**
 
-- **`MIMIR_OBSIDIAN_MIRROR_REL`** — full path under the vault (e.g. `Mimir` or `10_KGRAPH/KG/custom`). Wins over defaults.
+- **`MIMIR_OBSIDIAN_MIRROR_REL`** — full path under the vault (e.g. `Mimir` or `KGRAPH/custom`). Wins over defaults.
 - **`MIMIR_OBSIDIAN_BASE`** — legacy alias: if set and **`MIMIR_OBSIDIAN_MIRROR_REL`** is unset, mirror root is `<vault>/<BASE>` (e.g. `Mimir` for the old flat layout).
+
+If you used the older default **`10_KGRAPH/KG/<slug>/`**, set **`mirror_rel: "10_KGRAPH/KG/mimir"`** (or your slug) in config to keep writing there, or run **`npm run obsidian-backfill`** once after upgrading to populate **`KGRAPH/<slug>/`** and remove the old tree manually if you no longer need it.
 
 Set **`MIMIR_OBSIDIAN_VAULT_PATH`** to your vault root (e.g. `N:\WIKI\atlas_wiki\vault`).
 
@@ -258,7 +260,9 @@ Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAM
 | `MIMIR_CONFIG_PATH` | Absolute path to a YAML config file (optional; default `<MIMIR repo>/.mimir/config.yaml`). |
 | `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute vault path; **overrides** `obsidian.vault_path` in config (optional). |
 | `MIMIR_OBSIDIAN_DISABLED` | Set to `1` to disable WIKI mirror regardless of config. |
-| `MIMIR_OBSIDIAN_PROJECT_SLUG` | Folder name under `10_KGRAPH/KG/` (default **`mimir`**). |
+| `MIMIR_OBSIDIAN_PROJECT_SLUG` | Folder name under `KGRAPH/` (default **`mimir`**). |
+| `MIMIR_OBSIDIAN_PROJECT_NAME` | Display title for `01_PROJECTS/<slug>.md` (default: slug). |
+| `MIMIR_OBSIDIAN_README_PATH` | Absolute path to README to embed in the project note (overrides file + default). |
 | `MIMIR_OBSIDIAN_MIRROR_REL` | Override mirror root relative to vault (wins over default wiki path). |
 | `MIMIR_OBSIDIAN_BASE` | Legacy: single folder under vault if `MIRROR_REL` unset (e.g. **`Mimir`**). |
 

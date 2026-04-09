@@ -15,6 +15,10 @@ export interface ObsidianFileSection {
   enabled?: boolean;
   vault_path?: string;
   project_slug?: string;
+  /** H1 title for `01_PROJECTS/<slug>.md` (default: slug). */
+  project_name?: string;
+  /** Path to README to embed in the project note: absolute, or relative to Mimir install root. */
+  readme_path?: string;
   mirror_rel?: string;
   base?: string;
 }
@@ -25,9 +29,13 @@ export interface MimirConfigFile {
 
 export interface ObsidianMirrorSettings {
   vaultPath: string | null;
-  /** Vault-relative mirror root with `/` (wikilinks). */
+  /** Vault-relative mirror root with `/` (wikilinks). Default `KGRAPH/<slug>/`. */
   mirrorRel: string;
   projectSlug: string;
+  /** Display title for `01_PROJECTS/<slug>.md` H1. */
+  projectDisplayName: string;
+  /** Absolute path to README to embed in project note, if the file exists. */
+  readmeAbsPath: string | null;
 }
 
 let fileCache: MimirConfigFile | undefined;
@@ -59,6 +67,21 @@ function toPosixRel(rel: string): string {
   return rel.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
 }
 
+function resolveReadmeAbsPath(file: ObsidianFileSection | undefined): string | null {
+  const env = process.env.MIMIR_OBSIDIAN_README_PATH?.trim();
+  if (env) {
+    const p = path.resolve(env);
+    return fs.existsSync(p) ? p : null;
+  }
+  const rp = file?.readme_path?.trim();
+  if (rp) {
+    const p = path.isAbsolute(rp) ? path.resolve(rp) : path.join(mimirInstallRoot(), rp);
+    return fs.existsSync(p) ? p : null;
+  }
+  const def = path.join(mimirInstallRoot(), "README.md");
+  return fs.existsSync(def) ? def : null;
+}
+
 function sanitizeSlug(raw: string): string {
   const s = raw
     .replace(/[\/\\:*?"<>|#]/g, "-")
@@ -76,7 +99,13 @@ export function clearMimirConfigCache(): void {
 
 function computeObsidianMirrorSettings(): ObsidianMirrorSettings {
   if (process.env.MIMIR_OBSIDIAN_DISABLED === "1") {
-    return { vaultPath: null, mirrorRel: defaultMirrorRel("mimir"), projectSlug: "mimir" };
+    return {
+      vaultPath: null,
+      mirrorRel: defaultMirrorRel("mimir"),
+      projectSlug: "mimir",
+      projectDisplayName: "mimir",
+      readmeAbsPath: null,
+    };
   }
 
   const file = loadConfigFile().obsidian;
@@ -97,6 +126,12 @@ function computeObsidianMirrorSettings(): ObsidianMirrorSettings {
   const slugFromFile = file?.project_slug?.trim();
   const projectSlug = sanitizeSlug(slugFromEnv || slugFromFile || "mimir");
 
+  const displayFromEnv = process.env.MIMIR_OBSIDIAN_PROJECT_NAME?.trim();
+  const displayFromFile = file?.project_name?.trim();
+  const projectDisplayName = displayFromEnv || displayFromFile || projectSlug;
+
+  const readmeAbsPath = resolveReadmeAbsPath(file);
+
   const mirrorRelEnv = process.env.MIMIR_OBSIDIAN_MIRROR_REL?.trim();
   const baseEnv = process.env.MIMIR_OBSIDIAN_BASE?.trim();
   const mirrorRelFile = file?.mirror_rel?.trim();
@@ -109,11 +144,11 @@ function computeObsidianMirrorSettings(): ObsidianMirrorSettings {
   else if (baseFile) mirrorRel = toPosixRel(baseFile);
   else mirrorRel = defaultMirrorRel(projectSlug);
 
-  return { vaultPath, mirrorRel, projectSlug };
+  return { vaultPath, mirrorRel, projectSlug, projectDisplayName, readmeAbsPath };
 }
 
 function defaultMirrorRel(projectSlug: string): string {
-  return `10_KGRAPH/KG/${sanitizeSlug(projectSlug)}`;
+  return `KGRAPH/${sanitizeSlug(projectSlug)}`;
 }
 
 /**

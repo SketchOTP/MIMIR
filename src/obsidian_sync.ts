@@ -6,7 +6,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import yaml from "js-yaml";
 import type { EpisodeEntry, IntentDecision, SubsystemCard, TraceEntry, ValidationEntry } from "./schemas";
-import { getObsidianMirrorSettings } from "./mimir_config";
+import { getObsidianMirrorSettings, mimirInstallRoot } from "./mimir_config";
 
 function vaultPath(): string | null {
   return getObsidianMirrorSettings().vaultPath;
@@ -32,7 +32,7 @@ function wikilink(relPathWithoutMd: string, label?: string): string {
 }
 
 function fmBlock(data: Record<string, unknown>): string {
-  const body = yaml.dump(data, { lineWidth: 120, noRefs: true }).trimEnd();
+  const body = yaml.dump(data, { lineWidth: 120, noRefs: true, sortKeys: true }).trimEnd();
   return `---\n${body}\n---\n\n`;
 }
 
@@ -76,35 +76,66 @@ function footerMOC(baseRel: string): string {
   return `\n---\n${wikilink(`${baseRel}/MOC`, "← Mimir WIKI MOC")}\n`;
 }
 
-async function ensureProjectStub(vault: string, baseRel: string, slug: string): Promise<void> {
+/**
+ * `01_PROJECTS/<slug>.md`: project title + full README body + link into `KGRAPH/<slug>/`.
+ * Rewrites when README or this template changes (byte-stable frontmatter via sortKeys).
+ */
+async function ensureProjectNote(
+  vault: string,
+  baseRel: string,
+  slug: string,
+  displayName: string,
+  readmeAbs: string | null
+): Promise<void> {
   const projectsDir = path.join(vault, "01_PROJECTS");
   const note = path.join(projectsDir, `${slug}.md`);
-  try {
-    await fs.access(note);
-  } catch {
-    await fs.mkdir(projectsDir, { recursive: true });
-    const body = `# ${slug}
 
-Mimir **WIKI** mirror for this project (human-readable). **SQLite (\`mimir.db\`) is canonical** for MCP tools, packets, and graph index.
+  let readmeBody = "";
+  if (readmeAbs) {
+    try {
+      readmeBody = (await fs.readFile(readmeAbs, "utf8")).trimEnd();
+    } catch (e) {
+      console.error("[mimir] Obsidian project note: failed to read README:", readmeAbs, e);
+    }
+  }
 
-## Knowledge graph (automated notes)
+  const kgSection = `
+
+---
+
+## Knowledge graph (Mimir mirror)
+
+**SQLite (\`mimir.db\`) is canonical.** Automated notes live under \`${baseRel}/\`:
 
 - ${wikilink(`${baseRel}/MOC`, "MOC — map of mirrored memory")}
+- Folders: \`Episodes/\`, \`Tasks/\`, \`Intents/\`, \`Validations/\`, \`Subsystems/\`, \`Traces/\`
+`;
 
-Folders under \`${baseRel}/\`: \`Episodes/\`, \`Tasks/\`, \`Intents/\`, \`Validations/\`, \`Subsystems/\`, \`Traces/\`.
+  const mainMd = readmeBody
+    ? `# ${displayName}\n\n${readmeBody}`
+    : `# ${displayName}\n\n_No README embedded — add \`README.md\` at \`${mimirInstallRoot().replace(/\\/g, "/")}\`, or set \`obsidian.readme_path\` / \`MIMIR_OBSIDIAN_README_PATH\`._`;
+
+  const body = `${mainMd}${kgSection}
 
 tags: #mimir/project #mimir/wiki
 `;
-    await fs.writeFile(
-      note,
-      fmBlock({
-        tags: ["mimir/project", "mimir/wiki"],
-        mimir_kind: "project_stub",
-        mimir_project_slug: slug,
-      }) + body,
-      "utf8"
-    );
+
+  const fullContent =
+    fmBlock({
+      tags: ["mimir/project", "mimir/wiki"],
+      mimir_kind: "project_stub",
+      mimir_project_slug: slug,
+    }) + body;
+
+  try {
+    const existing = await fs.readFile(note, "utf8");
+    if (existing === fullContent) return;
+  } catch {
+    /* missing */
   }
+
+  await fs.mkdir(projectsDir, { recursive: true });
+  await fs.writeFile(note, fullContent, "utf8");
 }
 
 async function ensureMOC(vault: string, baseRel: string, slug: string): Promise<void> {
@@ -116,7 +147,7 @@ async function ensureMOC(vault: string, baseRel: string, slug: string): Promise<
     await fs.mkdir(root, { recursive: true });
     const body = `# Mimir WIKI — ${slug}
 
-**SQLite is the source of truth.** This tree is an **Obsidian-facing mirror** (graph, search, backlinks).
+**SQLite is the source of truth.** This folder is the **knowledge graph mirror** under \`${baseRel}/\` (graph, search, backlinks).
 
 ## Structure
 
@@ -124,7 +155,7 @@ async function ensureMOC(vault: string, baseRel: string, slug: string): Promise<
 - **Tasks** — hub per \`task_id\`, links to episodes
 - **Intents / Validations / Subsystems / Traces** — ledger rows
 
-## Project registry
+## Project (README + registry)
 
 - ${wikilink(`01_PROJECTS/${slug}`, `01_PROJECTS — ${slug}`)}
 
@@ -142,12 +173,12 @@ async function prepareMirror(vault: string): Promise<{ baseRel: string; slug: st
   const s = getObsidianMirrorSettings();
   const baseRel = s.mirrorRel;
   const slug = s.projectSlug;
-  await ensureProjectStub(vault, baseRel, slug);
+  await ensureProjectNote(vault, baseRel, slug, s.projectDisplayName, s.readmeAbsPath);
   await ensureMOC(vault, baseRel, slug);
   return { baseRel, slug };
 }
 
-/** Project stub under `01_PROJECTS/`, mirror root + `MOC.md` under `mirrorRel` (idempotent). */
+/** Project note under `01_PROJECTS/` (README + KG links), mirror root + `MOC.md` under `mirrorRel` (idempotent). */
 export async function ensureObsidianMirrorScaffold(): Promise<void> {
   const vault = vaultPath();
   if (!vault) return;

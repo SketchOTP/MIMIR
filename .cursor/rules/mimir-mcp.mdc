@@ -76,7 +76,7 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`mimir_apply_ci_result`** | Set validation by **`validation_id`** + **`verdict`** + optional CI provenance. |
 | **`mimir_team_ledger_export`** | JSON export of intents + validations. |
 | **`mimir_team_ledger_import`** | Merge export JSON (**INSERT OR REPLACE**). |
-| **`mimir_obsidian_backfill`** | Replay SQLite → Obsidian WIKI mirror (**`10_KGRAPH/KG/<slug>/`**); requires vault config. |
+| **`mimir_obsidian_backfill`** | Replay SQLite → **`KGRAPH/<slug>/`**; project note **`01_PROJECTS/<slug>.md`** = title + README; requires vault config. |
 | **`mimir_run_gc`** | Consolidate episodes → rules; trim noise when appropriate. |
 
 ---
@@ -161,11 +161,13 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING`** | `1` = bypass secret scan on writes (avoid). |
 | **`MIMIR_TEAM_LEDGER_IMPORT`** | JSON file merged at init. |
 | **`MIMIR_TEAM_LEDGER_EXPORT_PATH`** | Auto-rewrite after decision/validation writes. |
-| **`.mimir/config.yaml`** | Optional: **`obsidian.enabled`**, **`vault_path`**, **`project_slug`**, etc. (see **`config.example.yaml`**). |
+| **`.mimir/config.yaml`** | Optional: **`obsidian`**: **`enabled`**, **`vault_path`**, **`project_slug`**, **`project_name`**, **`readme_path`**, **`mirror_rel`**, etc. (see **`config.example.yaml`**). |
 | **`MIMIR_CONFIG_PATH`** | Absolute path to YAML config (optional). |
 | **`MIMIR_OBSIDIAN_VAULT_PATH`** | Overrides config vault path. **SQLite stays canonical.** |
 | **`MIMIR_OBSIDIAN_DISABLED`** | `1` = no WIKI mirror. |
-| **`MIMIR_OBSIDIAN_PROJECT_SLUG`** | Per-project folder under `10_KGRAPH/KG/` (default **`mimir`**). |
+| **`MIMIR_OBSIDIAN_PROJECT_SLUG`** | Per-project folder under `KGRAPH/` (default **`mimir`**). |
+| **`MIMIR_OBSIDIAN_PROJECT_NAME`** | Title for `01_PROJECTS/<slug>.md`. |
+| **`MIMIR_OBSIDIAN_README_PATH`** | Absolute path to README embedded in project note. |
 | **`MIMIR_OBSIDIAN_MIRROR_REL`** | Override mirror root under vault. |
 | **`MIMIR_OBSIDIAN_BASE`** | Legacy flat folder under vault if mirror rel unset. |
 
@@ -180,7 +182,7 @@ Shell syntax differs by OS; for copy-paste env examples run **`npm run install:h
 - **Secrets**: do not paste keys/tokens into Mimir fields; server blocks common patterns unless **`MIMIR_ALLOW_UNSAFE_SECRET_RECORDING=1`**.
 - **`N = 0` nodes** after ingest: fix **absolute path**, ensure sources exist, re-ingest.
 - **Subsystem id**: use **`SUBSYSTEM:Name`** form for **`mimir_record_subsystem_card`**.
-- **Obsidian WIKI:** enable via **`.mimir/config.yaml`** or env; writes land under **`10_KGRAPH/KG/<slug>/`** (+ **`01_PROJECTS/<slug>.md`**); **`mimir_obsidian_backfill`** replays DB → vault; **`mimir_run_gc`** / bulk **`team_ledger_import`** do not live-sync (run backfill after).
+- **Obsidian WIKI:** enable via **`.mimir/config.yaml`** or env; KG under **`KGRAPH/<slug>/`**; **`01_PROJECTS/<slug>.md`** = project title + full README + link to graph; **`mimir_obsidian_backfill`** replays DB → vault; **`mimir_run_gc`** / bulk **`team_ledger_import`** do not live-sync (run backfill after).
 
 ---
 

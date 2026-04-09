@@ -10,9 +10,16 @@ obsidian:
   # Absolute path to your Obsidian vault root (folder containing .obsidian)
   vault_path: "N:/WIKI/atlas_wiki/vault"
 
-  # Subfolder under the vault: 10_KGRAPH/KG/<project_slug>/
+  # Folder name under KGRAPH/<project_slug>/ (knowledge graph mirror)
   project_slug: mimir
 
+  # Optional: H1 title for 01_PROJECTS/<slug>.md (default: project_slug)
+  # project_name: "Mimir"
+
+  # Optional: README to embed in that note — absolute path, or relative to Mimir repo root
+  # (default if omitted: <MIMIR repo>/README.md when it exists)
+  # readme_path: "README.md"
+
   # Optional overrides (usually omit — defaults are fine)
-  # mirror_rel: "10_KGRAPH/KG/mimir"   # full mirror root under vault
-  # base: "Mimir"                      # legacy: single folder under vault
+  # mirror_rel: "KGRAPH/mimir"   # full mirror root under vault (default: KGRAPH/<project_slug>)
+  # base: "Mimir"                 # legacy: single folder under vault

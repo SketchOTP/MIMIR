@@ -57,7 +57,7 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "4.0.6",
+    version: "4.0.7",
   },
   {
     capabilities: {
@@ -359,7 +359,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "mimir_obsidian_backfill",
         description:
-          "Replays all intents, validations, subsystems, traces, and episodes from SQLite into the Obsidian WIKI mirror (10_KGRAPH/KG/<slug>/, 01_PROJECTS stub). Requires obsidian config or MIMIR_OBSIDIAN_VAULT_PATH. Idempotent overwrites.",
+          "Replays all intents, validations, subsystems, traces, and episodes from SQLite into the Obsidian WIKI mirror (KGRAPH/<slug>/, 01_PROJECTS note with README). Requires obsidian config or MIMIR_OBSIDIAN_VAULT_PATH. Idempotent overwrites.",
         inputSchema: {
           type: "object",
           properties: {},

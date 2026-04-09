@@ -1,6 +1,6 @@
 {
   "name": "mimir",
-  "version": "4.0.6",
+  "version": "4.0.7",
   "description": "Structure-first, token-bounded memory MCP for AI coding (SQLite + CodeRank + YAML packets).",
   "main": "index.js",
   "repository": {
