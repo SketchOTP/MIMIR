@@ -128,7 +128,7 @@ The **`mimir-mcp`** binary is declared in `package.json` and invoked by Cursor a
 
 ## MCP (Cursor and other clients)
 
-Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.7**.
+Native MCP server: `node <MIMIR_REPO>/bin/mimir-mcp.js` after `npm ci` (or `npm install`) in the Mimir repo. Server version **4.0.8**.
 
 One-shot **Obsidian backfill** (SQLite → `KGRAPH/<slug>/`): copy `.mimir/config.example.yaml` to `.mimir/config.yaml`, set `vault_path`, then `npm run obsidian-backfill` (or MCP tool **`mimir_obsidian_backfill`**).
 
@@ -234,7 +234,7 @@ Stderr on start: `[mimir-mcp] platform: …` then `[mimir-mcp] database: /path/t
 
 - **Knowledge graph root:** `<vault>/KGRAPH/<project_slug>/` with `Episodes/`, `Tasks/`, `Intents/`, `Validations/`, `Subsystems/`, `Traces/`, and **`MOC.md`**.
 - **Project slug:** **`MIMIR_OBSIDIAN_PROJECT_SLUG`** (default **`mimir`**). Use another repo’s slug when that project uses the same vault.
-- **Project note:** **`01_PROJECTS/<slug>.md`** — title (**`obsidian.project_name`** or env **`MIMIR_OBSIDIAN_PROJECT_NAME`**) plus the **full README** (default: `README.md` at the Mimir install root, or **`obsidian.readme_path`** / **`MIMIR_OBSIDIAN_README_PATH`**), then a short “Knowledge graph” section linking into **`KGRAPH/<slug>/`**.
+- **Project note:** **`01_PROJECTS/<slug>.md`** — **`mimir_project_name`** in YAML frontmatter (from **`obsidian.project_name`** or **`MIMIR_OBSIDIAN_PROJECT_NAME`**); **body = full README verbatim** (default: `README.md` at the Mimir install root, or **`obsidian.readme_path`** / **`MIMIR_OBSIDIAN_README_PATH`**); then a “Knowledge graph” section linking into **`KGRAPH/<slug>/`**.
 
 **Overrides:**
 
@@ -261,7 +261,7 @@ Values are the same on every OS; **shell syntax differs** (e.g. Windows `set NAM
 | `MIMIR_OBSIDIAN_VAULT_PATH` | Absolute vault path; **overrides** `obsidian.vault_path` in config (optional). |
 | `MIMIR_OBSIDIAN_DISABLED` | Set to `1` to disable WIKI mirror regardless of config. |
 | `MIMIR_OBSIDIAN_PROJECT_SLUG` | Folder name under `KGRAPH/` (default **`mimir`**). |
-| `MIMIR_OBSIDIAN_PROJECT_NAME` | Display title for `01_PROJECTS/<slug>.md` (default: slug). |
+| `MIMIR_OBSIDIAN_PROJECT_NAME` | **`mimir_project_name`** in project note frontmatter (default: slug). README body is not prefixed with a second title. |
 | `MIMIR_OBSIDIAN_README_PATH` | Absolute path to README to embed in the project note (overrides file + default). |
 | `MIMIR_OBSIDIAN_MIRROR_REL` | Override mirror root relative to vault (wins over default wiki path). |
 | `MIMIR_OBSIDIAN_BASE` | Legacy: single folder under vault if `MIRROR_REL` unset (e.g. **`Mimir`**). |

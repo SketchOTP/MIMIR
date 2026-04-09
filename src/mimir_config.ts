@@ -15,7 +15,7 @@ export interface ObsidianFileSection {
   enabled?: boolean;
   vault_path?: string;
   project_slug?: string;
-  /** H1 title for `01_PROJECTS/<slug>.md` (default: slug). */
+  /** `mimir_project_name` in `01_PROJECTS/<slug>.md` frontmatter (default: slug). README body is verbatim. */
   project_name?: string;
   /** Path to README to embed in the project note: absolute, or relative to Mimir install root. */
   readme_path?: string;
@@ -32,7 +32,7 @@ export interface ObsidianMirrorSettings {
   /** Vault-relative mirror root with `/` (wikilinks). Default `KGRAPH/<slug>/`. */
   mirrorRel: string;
   projectSlug: string;
-  /** Display title for `01_PROJECTS/<slug>.md` H1. */
+  /** `mimir_project_name` in project note frontmatter (Obsidian property). */
   projectDisplayName: string;
   /** Absolute path to README to embed in project note, if the file exists. */
   readmeAbsPath: string | null;

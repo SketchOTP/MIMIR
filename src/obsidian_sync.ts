@@ -77,7 +77,7 @@ function footerMOC(baseRel: string): string {
 }
 
 /**
- * `01_PROJECTS/<slug>.md`: project title + full README body + link into `KGRAPH/<slug>/`.
+ * `01_PROJECTS/<slug>.md`: project name in frontmatter; **full README verbatim** as body; then KG link into `KGRAPH/<slug>/`.
  * Rewrites when README or this template changes (byte-stable frontmatter via sortKeys).
  */
 async function ensureProjectNote(
@@ -105,14 +105,14 @@ async function ensureProjectNote(
 
 ## Knowledge graph (Mimir mirror)
 
-**SQLite (\`mimir.db\`) is canonical.** Automated notes live under \`${baseRel}/\`:
+**SQLite (\`mimir.db\`) is canonical.** Automated notes live under \`${baseRel}/\` (**KGRAPH → project → graph**):
 
 - ${wikilink(`${baseRel}/MOC`, "MOC — map of mirrored memory")}
 - Folders: \`Episodes/\`, \`Tasks/\`, \`Intents/\`, \`Validations/\`, \`Subsystems/\`, \`Traces/\`
 `;
 
   const mainMd = readmeBody
-    ? `# ${displayName}\n\n${readmeBody}`
+    ? readmeBody
     : `# ${displayName}\n\n_No README embedded — add \`README.md\` at \`${mimirInstallRoot().replace(/\\/g, "/")}\`, or set \`obsidian.readme_path\` / \`MIMIR_OBSIDIAN_README_PATH\`._`;
 
   const body = `${mainMd}${kgSection}
@@ -125,6 +125,7 @@ tags: #mimir/project #mimir/wiki
       tags: ["mimir/project", "mimir/wiki"],
       mimir_kind: "project_stub",
       mimir_project_slug: slug,
+      mimir_project_name: displayName,
     }) + body;
 
   try {
@@ -138,16 +139,16 @@ tags: #mimir/project #mimir/wiki
   await fs.writeFile(note, fullContent, "utf8");
 }
 
-async function ensureMOC(vault: string, baseRel: string, slug: string): Promise<void> {
+async function ensureMOC(vault: string, baseRel: string, slug: string, displayName: string): Promise<void> {
   const root = mirrorAbs(vault, baseRel);
   const mocFile = path.join(root, "MOC.md");
   try {
     await fs.access(mocFile);
   } catch {
     await fs.mkdir(root, { recursive: true });
-    const body = `# Mimir WIKI — ${slug}
+    const body = `# Knowledge graph — ${displayName}
 
-**SQLite is the source of truth.** This folder is the **knowledge graph mirror** under \`${baseRel}/\` (graph, search, backlinks).
+**SQLite is the source of truth.** This folder is **\`${baseRel}/\`** — the mirrored graph for **${displayName}** (Obsidian graph, search, backlinks).
 
 ## Structure
 
@@ -155,17 +156,21 @@ async function ensureMOC(vault: string, baseRel: string, slug: string): Promise<
 - **Tasks** — hub per \`task_id\`, links to episodes
 - **Intents / Validations / Subsystems / Traces** — ledger rows
 
-## Project (README + registry)
+## Project (README lives in 01_PROJECTS)
 
-- ${wikilink(`01_PROJECTS/${slug}`, `01_PROJECTS — ${slug}`)}
+- ${wikilink(`01_PROJECTS/${slug}`, `${displayName} — project note (README)`)}
 
 tags: #mimir/moc #mimir/wiki
 
 ---
 
-Config: \`.mimir/config.yaml\` (see \`config.example.yaml\`) or env \`MIMIR_OBSIDIAN_VAULT_PATH\`, \`MIMIR_OBSIDIAN_PROJECT_SLUG\`, \`MIMIR_OBSIDIAN_MIRROR_REL\` / \`MIMIR_OBSIDIAN_BASE\`.
+Config: \`.mimir/config.yaml\` (see \`config.example.yaml\`) or env \`MIMIR_OBSIDIAN_VAULT_PATH\`, \`MIMIR_OBSIDIAN_PROJECT_SLUG\`, \`MIMIR_OBSIDIAN_PROJECT_NAME\`, \`MIMIR_OBSIDIAN_README_PATH\`, \`MIMIR_OBSIDIAN_MIRROR_REL\` / \`MIMIR_OBSIDIAN_BASE\`.
 `;
-    await fs.writeFile(mocFile, fmBlock({ tags: ["mimir/moc", "mimir/wiki"], mimir_project_slug: slug }) + body, "utf8");
+    await fs.writeFile(
+      mocFile,
+      fmBlock({ tags: ["mimir/moc", "mimir/wiki"], mimir_project_slug: slug, mimir_project_name: displayName }) + body,
+      "utf8"
+    );
   }
 }
 
@@ -174,7 +179,7 @@ async function prepareMirror(vault: string): Promise<{ baseRel: string; slug: st
   const baseRel = s.mirrorRel;
   const slug = s.projectSlug;
   await ensureProjectNote(vault, baseRel, slug, s.projectDisplayName, s.readmeAbsPath);
-  await ensureMOC(vault, baseRel, slug);
+  await ensureMOC(vault, baseRel, slug, s.projectDisplayName);
   return { baseRel, slug };
 }
 

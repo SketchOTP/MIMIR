@@ -13,7 +13,7 @@ obsidian:
   # Folder name under KGRAPH/<project_slug>/ (knowledge graph mirror)
   project_slug: mimir
 
-  # Optional: H1 title for 01_PROJECTS/<slug>.md (default: project_slug)
+  # Optional: mimir_project_name in 01_PROJECTS/<slug>.md frontmatter (default: project_slug). README is embedded verbatim — no extra H1 added.
   # project_name: "Mimir"
 
   # Optional: README to embed in that note — absolute path, or relative to Mimir repo root
