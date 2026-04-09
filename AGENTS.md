@@ -15,6 +15,7 @@ Use this document as the **single source of truth** for how to use **Mimir** fro
 3. **Read the YAML packet** and treat **constraints, invariants, subsystem_cards, lesson_hints, selection_meta, open_questions** as binding inputs.
 4. **Expand** every important handle with **`mimir_expand_handle`** — never guess **`RULE:` / `TEST:` / `VERIFIER:` / `SUBSYSTEM:` / `FILE:` / `SYMBOL:`** text.
 5. **Record**: **`mimir_record_decision`** / **`mimir_record_validation`** when you change durable rules or tests; **`mimir_record_episode`** when you stop or finish.
+6. **Obsidian WIKI** (when enabled): align **slug / name / readme** with the **workspace repo**; after **`mimir_team_ledger_import`** or **`mimir_run_gc`**, run **`mimir_obsidian_backfill`**. Details: **`.cursor/rules/mimir-mcp.mdc`** (Cursor) or this file + WIKI subsection below.
 
 ---
 
@@ -150,7 +151,7 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 ## Database and environment
 
 - **Default DB:** `<MIMIR_repo>/mimir.db` (beside Mimir **`package.json`**), **not** the client cwd.
-- **`MIMIR_DB_PATH`**: absolute override. MCP logs **`[mimir-mcp] platform: …`** and **`[mimir-mcp] database: …`** on stderr.
+- **`MIMIR_DB_PATH`**: absolute override. MCP logs **`[mimir-mcp] version: …`**, **`platform: …`**, **`database: …`** on stderr.
 - **Obsidian WIKI (optional):** Prefer **`.mimir/config.yaml`** (copy from **`config.example.yaml`**) with **`obsidian.enabled`** and **`vault_path`**, or set **`MIMIR_OBSIDIAN_VAULT_PATH`**. Layout: **`KGRAPH/<slug>/`** (graph) · **`01_PROJECTS/<slug>.md`** (**`mimir_project_name`** + verbatim **README** + KG section). SQLite remains canonical.
 
 | Variable | Role |
@@ -169,6 +170,12 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`MIMIR_OBSIDIAN_BASE`** | Legacy flat folder under vault if mirror rel unset. |
 
 Shell syntax differs by OS; for copy-paste env examples run **`npm run install:hints`** in the Mimir repo.
+
+### Obsidian WIKI — team vault (sync with Cursor rule)
+
+- **One vault** for the team (**`obsidian.vault_path`** or **`MIMIR_OBSIDIAN_VAULT_PATH`**). Restart MCP after vault or config changes; stderr shows **`[mimir-mcp] version:`** and **`obsidian wiki:`** when enabled.
+- **Layout:** **`01_PROJECTS/<slug>.md`** ( **`mimir_project_name`** + workspace **README** + KG links) · **`KGRAPH/<slug>/`** (**`MOC.md`** + ledger folders). **Slug / name / `readme_path`** should match the **Cursor workspace product**, not necessarily `mimir` when working on another repo.
+- **After `mimir_team_ledger_import` or `mimir_run_gc`:** run **`mimir_obsidian_backfill`**. **Update Mimir:** `git pull`, `npm ci`, restart MCP — full WIKI steps: **`.cursor/rules/mimir-mcp.mdc`** in the Mimir repo.
 
 ---
 

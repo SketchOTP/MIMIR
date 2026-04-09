@@ -18,6 +18,7 @@ Use this document as the **single source of truth** for how to use **Mimir** in 
 3. **Read the YAML packet** and treat **constraints, invariants, subsystem_cards, lesson_hints, selection_meta, open_questions** as binding inputs.
 4. **Expand** every important handle with **`mimir_expand_handle`** — never guess **`RULE:` / `TEST:` / `VERIFIER:` / `SUBSYSTEM:` / `FILE:` / `SYMBOL:`** text.
 5. **Record**: **`mimir_record_decision`** / **`mimir_record_validation`** when you change durable rules or tests; **`mimir_record_episode`** when you stop or finish.
+6. **Obsidian WIKI** (when configured): treat the **team vault** as the live human mirror — keep **`project_slug` / `project_name` / `readme_path`** aligned with the **Cursor workspace repo** you are working on; after **`mimir_team_ledger_import`** or **`mimir_run_gc`**, run **`mimir_obsidian_backfill`** so the vault matches SQLite.
 
 ---
 
@@ -153,7 +154,7 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 ## Database and environment
 
 - **Default DB:** `<MIMIR_repo>/mimir.db` (beside Mimir **`package.json`**), **not** Cursor cwd.
-- **`MIMIR_DB_PATH`**: absolute override. MCP logs **`[mimir-mcp] platform: …`** and **`[mimir-mcp] database: …`** on stderr.
+- **`MIMIR_DB_PATH`**: absolute override. MCP logs **`[mimir-mcp] version: …`**, **`platform: …`**, **`database: …`** on stderr.
 
 | Variable | Role |
 |----------|------|
@@ -172,6 +173,43 @@ Without ingest: **ledger + packets from recorded data** still work; **no reliabl
 | **`MIMIR_OBSIDIAN_BASE`** | Legacy flat folder under vault if mirror rel unset. |
 
 Shell syntax differs by OS; for copy-paste env examples run **`npm run install:hints`** in the Mimir repo.
+
+---
+
+## Obsidian WIKI — team vault (use it fully)
+
+**SQLite (`mimir.db`) is canonical.** The **Obsidian vault** is the **WIKI mirror**: graph view, backlinks, reading, and search — not a second database.
+
+### Stable vault path (your usual setup)
+
+- Configure **one vault** the team always uses (e.g. **`N:/WIKI/atlas_wiki/vault`**): **`obsidian.vault_path`** in **`<MIMIR_repo>/.mimir/config.yaml`**, or **`MIMIR_OBSIDIAN_VAULT_PATH`** on the Mimir MCP server in Cursor. Prefer **forward slashes** on Windows in YAML.
+- After changing **vault path**, **Obsidian env vars**, or **`.mimir/config.yaml`**, **restart the Mimir MCP server** (Cursor: **Developer: Reload Window**, or disable/enable the Mimir MCP entry) so the process reloads config. Confirm stderr: **`[mimir-mcp] version:`** and **`[mimir-mcp] obsidian wiki: <vault> → KGRAPH/...`**.
+
+### Per project (new repo or existing — correct WIKI shape)
+
+Under that vault, Mimir writes:
+
+| Location | Role |
+|----------|------|
+| **`01_PROJECTS/<slug>.md`** | Registry note: **`mimir_project_name`** (frontmatter) + **verbatim README** of the product + “Knowledge graph” section linking into **`KGRAPH/<slug>/`**. |
+| **`KGRAPH/<slug>/`** | Mirrored ledger: **`MOC.md`**, **`Episodes/`**, **`Tasks/`**, **`Intents/`**, **`Validations/`**, **`Subsystems/`**, **`Traces/`**. |
+
+**`<slug>` must match the codebase you are mirroring**, not a generic default when you are **not** developing the Mimir repo itself:
+
+- Set **`obsidian.project_slug`** (or **`MIMIR_OBSIDIAN_PROJECT_SLUG`**) to a stable id for the **opened workspace** (e.g. repo or product name, filesystem-safe).
+- Set **`obsidian.project_name`** / **`MIMIR_OBSIDIAN_PROJECT_NAME`** for a readable Obsidian title.
+- Set **`obsidian.readme_path`** or **`MIMIR_OBSIDIAN_README_PATH`** to the **absolute path** of that workspace’s **`README.md`** so **`01_PROJECTS/<slug>.md`** documents the **right product**. If you omit this while working outside the Mimir repo, the note may embed **Mimir’s** README by mistake — **fix path when switching projects**.
+
+### What agents should do
+
+1. **Normal workflow unchanged** — record decisions, validations, episodes, subsystems, traces; when the vault resolves, live sync updates **`KGRAPH/<slug>/`**.
+2. **After bulk SQLite changes** that do not re-trigger per-row sync — run **`mimir_obsidian_backfill`** (especially after **`mimir_team_ledger_import`** or **`mimir_run_gc`**).
+3. **When helping the user in Obsidian** — point to **`01_PROJECTS/<slug>.md`** (overview + README) and **`KGRAPH/<slug>/MOC.md`** (map of mirrored memory). Wikilinks use vault-relative paths.
+4. **If the user opens a different repo** in Cursor but keeps the same vault — remind them to update **slug / name / readme_path** (or MCP env) so notes do not overwrite the wrong **`KGRAPH/<slug>/`** tree.
+
+### MCP server update (after pulling Mimir)
+
+On the machine that runs MCP: **`git pull`** in the Mimir repo (e.g. **`N:\MIMIR`**), then **`npm ci`** (or **`npm install`** when the lockfile did not change). **Restart** the Mimir MCP server in Cursor. On stderr, confirm **`[mimir-mcp] version:`** matches **`package.json`** in that repo.
 
 ---
 

@@ -53,11 +53,14 @@ function validationVerdict(v: unknown): ValidationEntry["last_run_verdict"] {
   return "PENDING";
 }
 
+/** Logged at startup; keep in sync with package.json / playbook. */
+const MIMIR_MCP_SERVER_VERSION = "4.0.9";
+
 // Define the core MCP Server
 const server = new Server(
   {
     name: "mimir-v2-mcp",
-    version: "4.0.8",
+    version: MIMIR_MCP_SERVER_VERSION,
   },
   {
     capabilities: {
@@ -72,6 +75,7 @@ async function initMemory() {
   refreshObsidianConfigCache();
   const dbPath = resolveMcpDbPath();
   await memory.init(dbPath);
+  console.error(`[mimir-mcp] version: ${MIMIR_MCP_SERVER_VERSION}`);
   console.error(`[mimir-mcp] platform: ${osDisplayName()}`);
   console.error(`[mimir-mcp] database: ${dbPath}`);
   const obs = getObsidianMirrorSettings();
